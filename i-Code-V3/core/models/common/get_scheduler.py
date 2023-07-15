@@ -25,17 +25,11 @@ class get_scheduler(object):
         if cfg is None:
             return None
         if isinstance(cfg, list):
-            schedulers = []
-            for ci in cfg:
-                t = ci.type
-                schedulers.append(
-                    self.lr_scheduler[t](**ci.args))
-            if len(schedulers) == 0:
-                raise ValueError
-            else:
+            if schedulers := [self.lr_scheduler[ci.type](**ci.args) for ci in cfg]:
                 return compose_scheduler(schedulers)
-        t = cfg.type
-        return self.lr_scheduler[t](**cfg.args)
+            else:
+                raise ValueError
+        return self.lr_scheduler[cfg.type](**cfg.args)
         
 
 def register(name):
@@ -114,9 +108,8 @@ class constant_scheduler(template_scheduler):
         m = [0] + milestones + [step]
         lr_iter = start_lr
         self.lr = []
-        for ms, me in zip(m[0:-1], m[1:]):
-            for _ in range(ms, me):
-                self.lr.append(lr_iter)
+        for ms, me in zip(m[:-1], m[1:]):
+            self.lr.extend(lr_iter for _ in range(ms, me))
             lr_iter *= gamma
 
     def __getitem__(self, idx):
@@ -176,15 +169,14 @@ class LambdaWarmUpCosineScheduler(template_scheduler):
                 print(f"current step: {n}, recent lr-multiplier: {self.last_lr}")
         if n < self.lr_warm_up_steps:
             lr = (self.lr_max - self.lr_start) / self.lr_warm_up_steps * n + self.lr_start
-            self.last_lr = lr
-            return lr
         else:
             t = (n - self.lr_warm_up_steps) / (self.lr_max_decay_steps - self.lr_warm_up_steps)
             t = min(t, 1.0)
             lr = self.lr_min + 0.5 * (self.lr_max - self.lr_min) * (
                     1 + np.cos(t * np.pi))
-            self.last_lr = lr
-            return lr
+
+        self.last_lr = lr
+        return lr
 
     def __getitem__(self, idx):
         return self.schedule(idx) * self.lr_multi
@@ -216,11 +208,9 @@ class LambdaWarmUpCosineScheduler2(template_scheduler):
         self.verbosity_interval = verbosity_interval
 
     def find_in_interval(self, n):
-        interval = 0
-        for cl in self.cum_cycles[1:]:
+        for interval, cl in enumerate(self.cum_cycles[1:]):
             if n <= cl:
                 return interval
-            interval += 1
 
     def schedule(self, n):
         cycle = self.find_in_interval(n)
@@ -230,15 +220,14 @@ class LambdaWarmUpCosineScheduler2(template_scheduler):
                                                        f"current cycle {cycle}")
         if n < self.lr_warm_up_steps[cycle]:
             f = (self.f_max[cycle] - self.f_start[cycle]) / self.lr_warm_up_steps[cycle] * n + self.f_start[cycle]
-            self.last_f = f
-            return f
         else:
             t = (n - self.lr_warm_up_steps[cycle]) / (self.cycle_lengths[cycle] - self.lr_warm_up_steps[cycle])
             t = min(t, 1.0)
             f = self.f_min[cycle] + 0.5 * (self.f_max[cycle] - self.f_min[cycle]) * (
                     1 + np.cos(t * np.pi))
-            self.last_f = f
-            return f
+
+        self.last_f = f
+        return f
 
     def __getitem__(self, idx):
         return self.schedule(idx) * self.lr_multi
@@ -254,9 +243,7 @@ class LambdaLinearScheduler(LambdaWarmUpCosineScheduler2):
                       f"current cycle {cycle}")
         if n < self.lr_warm_up_steps[cycle]:
             f = (self.f_max[cycle] - self.f_start[cycle]) / self.lr_warm_up_steps[cycle] * n + self.f_start[cycle]
-            self.last_f = f
-            return f
         else:
             f = self.f_min[cycle] + (self.f_max[cycle] - self.f_min[cycle]) * (self.cycle_lengths[cycle] - n) / (self.cycle_lengths[cycle])
-            self.last_f = f
-            return f
+        self.last_f = f
+        return f

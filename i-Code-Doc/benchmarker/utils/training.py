@@ -36,9 +36,9 @@ def calculate_dataset_size(pregenerated_data_path: Path) -> list:
         if epoch_path.is_dir() and metrics_file.is_file():
             metrics = json.loads(metrics_file.read_text())
             samples_per_epoch.append(metrics["num_training_examples"])
+        elif i == 0:
+            raise FileNotFoundError("No training data was found!")
         else:
-            if i == 0:
-                raise FileNotFoundError("No training data was found!")
             break
     return samples_per_epoch
 
@@ -85,23 +85,23 @@ def conf_to_model_name(config: BaseBenchmarkerConfig, training_config, num_sampl
         embedding_description = 'none'
 
     if num_samples > 1000000:
-        ns = str(int(num_samples / 1000000)) + "m"
+        ns = f"{str(num_samples // 1000000)}m"
     elif num_samples > 1000:
-        ns = str(int(num_samples / 1000)) + "k"
+        ns = f"{str(num_samples // 1000)}k"
     else:
         ns = str(num_samples)
     model_path = ",".join(
         [
             base_name,
-            "ce=" + embedding_description,
-            "ce-args=" + ce_args,
+            f"ce={embedding_description}",
+            f"ce-args={ce_args}",
             "td=" + date.today().strftime("%Y-%m-%d"),
-            "ts=" + str(num_training_examples),
+            f"ts={str(num_training_examples)}",
             "tt=" + "-".join(config.training_tasks),
-            "ns=" + ns,
-            "lr=" + str(training_config.learning_rate),
-            "ce-w=" + str(config.max_context_weight),
-            "d=" + str(config.max_pos_dropout),
+            f"ns={ns}",
+            f"lr={str(training_config.learning_rate)}",
+            f"ce-w={str(config.max_context_weight)}",
+            f"d={str(config.max_pos_dropout)}",
         ]
     )
     return model_path
@@ -110,14 +110,13 @@ def conf_to_model_name(config: BaseBenchmarkerConfig, training_config, num_sampl
 def check_model_type_consistency(model_path: Path, model_type: str) -> None:
     assert model_type in MODEL_CLASSES.keys(), f"Model type {model_type} is not supported"
 
-    contain_mtype_in_name = False
-    for mtype in MODEL_CLASSES.keys():
-        if mtype + "-" in model_path.stem:
-            contain_mtype_in_name = True
+    contain_mtype_in_name = any(
+        f"{mtype}-" in model_path.stem for mtype in MODEL_CLASSES.keys()
+    )
     if contain_mtype_in_name:
-        assert model_type + "-" in model_path.stem, (
-            f"Model picked up with {model_type}, " "but folder name contains different architecture name"
-        )
+        assert (
+            f"{model_type}-" in model_path.stem
+        ), f"Model picked up with {model_type}, but folder name contains different architecture name"
     config = MODEL_CLASSES[model_type]['config'].from_pretrained(str(model_path))
     if hasattr(config, 'model_type'):
         assert (
@@ -144,7 +143,7 @@ def load_config(
     model_dict['model_type'] = model_type
     model_dict['model_path'] = model_path
 
-    if 'bert_model' in model_dict.keys():
+    if 'bert_model' in model_dict:
         model_dict['model_path'] = model_dict['bert_model']
 
     for key, value in model_dict.items():
@@ -234,9 +233,12 @@ def load_2d_model(
 
 
 def features_collate(batch: Sequence[Feature]) -> Dict[str, Any]:
-    dict_batch = {}
     token_label_ids_batch = [feat.token_label_ids for feat in batch]
-    dict_batch['token_label_ids'] = cast(Dict[str, Any], default_collate(token_label_ids_batch))
+    dict_batch = {
+        'token_label_ids': cast(
+            Dict[str, Any], default_collate(token_label_ids_batch)
+        )
+    }
     lm_label_ids_batch = [feat.lm_label_ids for feat in batch]
     dict_batch['lm_label_ids'] = cast(Dict[str, Any], default_collate(lm_label_ids_batch))
     input_masks_batch = [feat.input_masks for feat in batch]
@@ -250,14 +252,14 @@ def features_collate(batch: Sequence[Feature]) -> Dict[str, Any]:
 
 def dict_collate(batch: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     if isinstance(batch[0], dict):
-        dict_batch = {}
-        for k in batch[0].keys():
-            if k == "img_lst":
-                # assuming 3 channels, temporary and only for DALLE
-                dict_batch[k] = merge_images_into_tensor([el[k].permute(2,0,1) for el in batch], 
-                                                         IMG_SIZE_DIVISIBILITY)
-            else:
-                dict_batch[k] = dict_collate([el[k] for el in batch])
+        dict_batch = {
+            k: merge_images_into_tensor(
+                [el[k].permute(2, 0, 1) for el in batch], IMG_SIZE_DIVISIBILITY
+            )
+            if k == "img_lst"
+            else dict_collate([el[k] for el in batch])
+            for k in batch[0].keys()
+        }
         return prepare_batch_dict(dict_batch)
     elif batch[0] is None:
         return None  # type: ignore
@@ -282,7 +284,7 @@ def merge_images_into_tensor(
     Returns:
         an `ImageList`.
     """
-    assert len(tensors) > 0
+    assert tensors
     assert isinstance(tensors, (tuple, list))
     for t in tensors:
         assert isinstance(t, torch.Tensor), type(t)
@@ -323,7 +325,9 @@ def _as_tensor(x: Tuple[int, int]) -> torch.Tensor:
     """
     if torch.jit.is_scripting():
         return torch.as_tensor(x)
-    if isinstance(x, (list, tuple)) and all([isinstance(t, torch.Tensor) for t in x]):
+    if isinstance(x, (list, tuple)) and all(
+        isinstance(t, torch.Tensor) for t in x
+    ):
         return torch.stack(x)
     return torch.as_tensor(x)
 
@@ -331,15 +335,18 @@ def _as_tensor(x: Tuple[int, int]) -> torch.Tensor:
 def dict_collate_trim_l5(batch: Sequence[Dict[str, Any]],
                          input_len=None, target_len=None, divisibility=32) -> Dict[str, Any]:
     if input_len is None:
-        input_len = max([s["attention_mask"].sum() for s in batch])
+        input_len = max(s["attention_mask"].sum() for s in batch)
         input_len = (input_len + (divisibility - 1)) // divisibility * divisibility
     if target_len is None:
-        target_len = max([np.count_nonzero(s["labels"]) for s in batch]) + 1
+        target_len = max(np.count_nonzero(s["labels"]) for s in batch) + 1
         target_len = (target_len + (divisibility - 1)) // divisibility * divisibility
     if isinstance(batch[0], dict):
-        dict_batch = {}
-        for k in batch[0].keys():
-            dict_batch[k] = dict_collate_trim_l5([el[k] for el in batch], input_len, target_len)
+        dict_batch = {
+            k: dict_collate_trim_l5(
+                [el[k] for el in batch], input_len, target_len
+            )
+            for k in batch[0].keys()
+        }
         return prepare_batch_dict_trim_l5(dict_batch, input_len=input_len, target_len=target_len)
     elif batch[0] is None:
         return None  # type: ignore
@@ -398,14 +405,10 @@ def get_total_samples(max_epochs: int, max_train_samples: int, pregenerated_data
     """
     assert (max_epochs != 1000) ^ (max_train_samples is not sys.maxsize)
 
-    if max_epochs != 1000:
-        total_samples = 0
-        dataset_size = calculate_dataset_size(pregenerated_data)
-        for i in range(max_epochs):
-            total_samples += dataset_size[i % len(dataset_size)]
-    else:
-        total_samples = max_train_samples
-    return total_samples
+    if max_epochs == 1000:
+        return max_train_samples
+    dataset_size = calculate_dataset_size(pregenerated_data)
+    return sum(dataset_size[i % len(dataset_size)] for i in range(max_epochs))
 
 
 def get_total_steps(

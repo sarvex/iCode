@@ -64,14 +64,14 @@ class DataCollator:
         max_len = self.max_length
         max_len_decoder = self.max_length_decoder
         max_len_char = self.max_length_char
-        max_feature_len = max([f["input_ids"].shape[0] for f in features])
-        max_feature_len_decoder = max([f["labels"].shape[0] for f in features])
-        
+        max_feature_len = max(f["input_ids"].shape[0] for f in features)
+        max_feature_len_decoder = max(f["labels"].shape[0] for f in features)
+
         target_len = min(max_feature_len, max_len)
         target_len_decoder = min(max_feature_len_decoder, max_len_decoder)
         # if features[0]["char_ids"] is not None:
         if "char_ids" in features[0]:
-            max_feature_len_char = max([f["char_ids"].shape[0] for f in features])
+            max_feature_len_char = max(f["char_ids"].shape[0] for f in features)
             target_len_char = min(max_feature_len_char, max_len_char)
 
         batch = {}
@@ -97,11 +97,11 @@ class DataCollator:
         if "position_ids" not in batch:
             position_ids = torch.stack([torch.arange(target_len, dtype=torch.long) for _ in range(batch_size)])
             batch["position_ids"] = position_ids
-        
+
         if 'image' in features[0]:
             image_list = torch.stack([d['image'] for d in features])
-            batch.update({'image': image_list})
-            
+            batch['image'] = image_list
+
             for k in ['image_mask_label']:
                 if k in features[0] and features[0][k] is not None:
                     image_size = batch['image'].size()
@@ -109,18 +109,18 @@ class DataCollator:
                     image_mask_labels = []
                     ids_restores = []
                     ids_keeps = []
-                    for d in features:
+                    for _ in features:
                         mask, ids_restore, ids_remove, ids_keep = random_masking(int(image_size[2]**2/16**2), mask_ratio)
                         image_mask_labels.append(mask)
                         ids_restores.append(ids_restore)
                         ids_keeps.append(ids_keep)
-                        
+
                     stack_labels = torch.stack(image_mask_labels, dim=0)
-                    batch.update({'image_mask_label': stack_labels})
+                    batch['image_mask_label'] = stack_labels
                     stack_labels = torch.stack(ids_restores, dim=0)
-                    batch.update({'ids_restore': stack_labels})
+                    batch['ids_restore'] = stack_labels
                     stack_labels = torch.stack(ids_keeps, dim=0)
-                    batch.update({'ids_keep': stack_labels})
+                    batch['ids_keep'] = stack_labels
 
         return batch
 

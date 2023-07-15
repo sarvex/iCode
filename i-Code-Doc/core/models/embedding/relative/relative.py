@@ -125,9 +125,13 @@ class RelativePositionBias1D(RelativePositionBiasBase):
     def prepare_input(self, attention_mask: Optional[Tensor] = None,
                       seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
         assert self.scaling_factor == 1, "No need to scale 1d features"
-        relative_position = self.get_relative_position(torch.arange(attention_mask.size(1), dtype=torch.long, device=attention_mask.device)[None, :])
-
-        return relative_position
+        return self.get_relative_position(
+            torch.arange(
+                attention_mask.size(1),
+                dtype=torch.long,
+                device=attention_mask.device,
+            )[None, :]
+        )
 
 
 def expand_feature(token_map, feature, special_tokens_value=0):
@@ -148,9 +152,7 @@ def expand_feature(token_map, feature, special_tokens_value=0):
     else:
         raise AttributeError("Wrong dimension of input feature tensor")
 
-    expanded_feature = torch.gather(feature_all, 1, expand_index)
-
-    return expanded_feature
+    return torch.gather(feature_all, 1, expand_index)
 
 
 class RelativePositionBiasHorizontal(RelativePositionBiasBase):

@@ -48,8 +48,7 @@ class FrozenCLIPTextEmbedder(AbstractEncoder):
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
         tokens = batch_encoding["input_ids"].to(self.device)
         outputs = self.transformer(input_ids=tokens)
-        z = outputs.last_hidden_state
-        return z
+        return outputs.last_hidden_state
 
     def encode(self, text):
         return self(text)
@@ -96,8 +95,7 @@ class FrozenCLIP(AbstractEncoder):
         batch_encoding = self.tokenizer(text, truncation=True, max_length=self.max_length, return_length=True,
                                         return_overflowing_tokens=False, padding="max_length", return_tensors="pt")
         tokens = batch_encoding["input_ids"].to(self.get_device())
-        outputs = self.model.get_text_features(input_ids=tokens)
-        return outputs
+        return self.model.get_text_features(input_ids=tokens)
 
     def encode_vision_pooled(self, images):
         inputs = self.processor(images=images, return_tensors="pt")
@@ -116,22 +114,21 @@ class FrozenCLIP(AbstractEncoder):
         
     def encode_vision_noproj(self, vision_inputs):
         vision_inputs = ((vision_inputs+1)/2).to('cpu').numpy()
-        
+
         if vision_inputs.ndim == 5:
             num_frames = vision_inputs.shape[2]
             vision_inputs = rearrange(vision_inputs, 'b c f h w -> (b f) h w c')
         else:
             num_frames = 1
             vision_inputs = rearrange(vision_inputs, 'b c h w -> b h w c')
-            
-        vision_inputs = [vi for vi in vision_inputs]
+
+        vision_inputs = list(vision_inputs)
         inputs = self.processor(images=vision_inputs, return_tensors="pt")
         pixels = inputs['pixel_values'].to(self.dtype).to(self.device)
-        
+
         if num_frames > 1:
             pixels = rearrange(pixels, '(b f) h w c -> b f h w c', f=num_frames)
-        outputs = self.model.vision_model(pixel_values=pixels)
-        return outputs
+        return self.model.vision_model(pixel_values=pixels)
 
 
     def encode_text(self, text):

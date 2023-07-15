@@ -101,7 +101,8 @@ class BaseLightningModule(pl.LightningModule):
                 "params": [
                     p
                     for n, p in model.named_parameters()
-                    if not any(nd in n for nd in no_decay) and n not in pkm_parameters
+                    if all(nd not in n for nd in no_decay)
+                    and n not in pkm_parameters
                 ],
                 "weight_decay": self.hparams.weight_decay,
             },
@@ -109,12 +110,14 @@ class BaseLightningModule(pl.LightningModule):
                 "params": [
                     p
                     for n, p in model.named_parameters()
-                    if any(nd in n for nd in no_decay) and not n in pkm_parameters
+                    if any(nd in n for nd in no_decay) and n not in pkm_parameters
                 ],
                 "weight_decay": 0.0,
             },
             {
-                "params": [p for n, p in model.named_parameters() if n in pkm_parameters],
+                "params": [
+                    p for n, p in model.named_parameters() if n in pkm_parameters
+                ],
                 "lr": self.hparams.pkm_learning_rate,
             },
         ]

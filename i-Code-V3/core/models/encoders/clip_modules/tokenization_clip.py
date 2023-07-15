@@ -264,11 +264,11 @@ class CLIPTokenizer(PreTrainedTokenizer):
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token[:-1]) + (token[-1] + "</w>",)
+        word = tuple(token[:-1]) + (f"{token[-1]}</w>", )
         pairs = get_pairs(word)
 
         if not pairs:
-            return token + "</w>"
+            return f"{token}</w>"
 
         while True:
             bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
@@ -315,7 +315,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+            bpe_tokens.extend(iter(self.bpe(token).split(" ")))
         return bpe_tokens
 
     def _convert_token_to_id(self, token):
@@ -330,18 +330,25 @@ class CLIPTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         byte_array = bytearray([self.byte_decoder[c] for c in text])
-        text = byte_array.decode("utf-8", errors=self.errors).replace("</w>", " ").strip()
-        return text
+        return (
+            byte_array.decode("utf-8", errors=self.errors)
+            .replace("</w>", " ")
+            .strip()
+        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (f"{filename_prefix}-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
         merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+            save_directory,
+            (f"{filename_prefix}-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["merges_file"],
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
@@ -353,8 +360,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!".format(merge_file)
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive. Please check that the tokenizer is not corrupted!"
                     )
                     index = token_index
                 writer.write(" ".join(bpe_tokens) + "\n")

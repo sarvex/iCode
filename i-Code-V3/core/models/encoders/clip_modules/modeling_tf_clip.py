@@ -250,9 +250,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
 
         position_embeds = tf.gather(params=self.position_embedding, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
-        final_embeddings = inputs_embeds + position_embeds
-
-        return final_embeddings
+        return inputs_embeds + position_embeds
 
 
 class TFCLIPAttention(tf.keras.layers.Layer):
@@ -347,11 +345,11 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.embed_dim))
 
         attention_output = self.out_proj(attention_output, training=training)
-        # In TFBert, attention weights are returned after dropout.
-        # However, in CLIP, they are returned before dropout.
-        outputs = (attention_output, _attention_probs) if output_attentions else (attention_output,)
-
-        return outputs
+        return (
+            (attention_output, _attention_probs)
+            if output_attentions
+            else (attention_output,)
+        )
 
 
 class TFCLIPMLP(tf.keras.layers.Layer):
@@ -426,9 +424,7 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
         hidden_states = self.mlp(hidden_states=hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,) + attention_outputs[1:]  # add attentions if we output them
-
-        return outputs
+        return (hidden_states,) + attention_outputs[1:]
 
 
 class TFCLIPEncoder(tf.keras.layers.Layer):
@@ -605,7 +601,7 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
 
-        text_model_outputs = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -614,8 +610,6 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
-
-        return text_model_outputs
 
 
 class TFCLIPVisionTransformer(tf.keras.layers.Layer):
@@ -689,15 +683,13 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        vision_model_outputs = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
         )
-
-        return vision_model_outputs
 
 
 @keras_serializable
@@ -785,9 +777,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         )
 
         pooled_output = text_outputs[1]
-        text_features = self.text_projection(inputs=pooled_output)
-
-        return text_features
+        return self.text_projection(inputs=pooled_output)
 
     @unpack_inputs
     def get_image_features(
@@ -810,9 +800,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(inputs=pooled_output)
-
-        return image_features
+        return self.visual_projection(inputs=pooled_output)
 
     @unpack_inputs
     def call(
@@ -871,10 +859,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         logits_per_text = tf.matmul(text_embeds, image_embeds, transpose_b=True) * logit_scale
         logits_per_image = tf.transpose(logits_per_text)
 
-        loss = None
-        if return_loss:
-            loss = clip_loss(logits_per_text)
-
+        loss = clip_loss(logits_per_text) if return_loss else None
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return (loss,) + output if loss is not None else output
@@ -1076,7 +1061,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
 
-        outputs = self.clip(
+        return self.clip(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1085,8 +1070,6 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-
-        return outputs
 
     @tf.function(
         input_signature=[
@@ -1187,15 +1170,13 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
 
-        outputs = self.clip(
+        return self.clip(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
         )
-
-        return outputs
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -1285,7 +1266,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         >>> text_features = model.get_text_features(**inputs)
         ```"""
 
-        text_features = self.clip.get_text_features(
+        return self.clip.get_text_features(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1293,8 +1274,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return text_features
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
@@ -1329,14 +1308,12 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         ```"""
 
-        image_features = self.clip.get_image_features(
+        return self.clip.get_image_features(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return image_features
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1379,7 +1356,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         >>> probs = tf.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
 
-        outputs = self.clip(
+        return self.clip(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -1389,8 +1366,6 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return outputs
 
     def serving_output(self, output: TFCLIPOutput) -> TFCLIPOutput:
         # TODO: As is this currently fails with saved_model=True, because

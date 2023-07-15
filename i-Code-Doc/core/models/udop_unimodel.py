@@ -187,7 +187,7 @@ class T52dStack(T5PreTrainedModel):
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
         self._max_length = config.max_length
-        
+
         setattr(config, 'output_attentions', True)
         if self.is_decoder:
             self.num_layers = (
@@ -199,17 +199,20 @@ class T52dStack(T5PreTrainedModel):
             )
 
         self.block = nn.ModuleList(
-            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
+            [
+                T5Block(config, has_relative_attention_bias=i == 0)
+                for i in range(self.num_layers)
+            ]
         )
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        
-        
+
+
         self.dropout = nn.Dropout(config.dropout_rate)
-        
+
         if not self.is_decoder:
             self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
 
-            
+
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
 
@@ -219,7 +222,7 @@ class T52dStack(T5PreTrainedModel):
                 self._tie_or_clone_weights(
                     bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
                 )
-                
+
         self.init_weights()
         
 
@@ -266,9 +269,9 @@ class T52dStack(T5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-                      
-            
-            
+
+
+
         #======================================================    
         # input embeddings processing
 
@@ -299,19 +302,19 @@ class T52dStack(T5PreTrainedModel):
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
-                
+
         if inputs_patches is not None:
             #===========================    
             # combine OCR text and visual embed
             inputs_embeds, seg_data, attention_mask = collate_vlembed(inputs_patches, inputs_embeds, seg_data, visual_seg_data, special_vis_token, attention_mask, num_patches, 0)
             input_shape = inputs_embeds.size()[:-1]
-            
+
         if not self.is_decoder:
             inputs_embeds += self.cell2dembedding(seg_data)
 
         batch_size, seq_length = input_shape
-        
-        
+
+
         #======================================================    
         # input masking/pos embed processing
 
@@ -319,8 +322,10 @@ class T52dStack(T5PreTrainedModel):
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
         if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
-            
+            assert (
+                self.is_decoder
+            ), f":obj:`use_cache` can only be set to `True` if {self} is used as a decoder"
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -357,13 +362,13 @@ class T52dStack(T5PreTrainedModel):
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
 
-        
-        
+
+
         #======================================================    
         # model inferencing 
-        
+
         hidden_states = inputs_embeds
-                               
+
         hidden_states = self.dropout(hidden_states)
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
@@ -423,7 +428,7 @@ class T52dStack(T5PreTrainedModel):
                 ]
                 if v is not None
             )
-        
+
         return BaseModelOutputWithVisionEmbeds(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -527,11 +532,7 @@ class UdopUnimodelForConditionalGeneration(T5ForConditionalGeneration):
     ) -> Tuple[Tensor, ...]:
         
         if input_dict is not None:
-            return_task_outputs = []
-            for task in input_dict:
-                return_task_outputs.append(self.forward(**input_dict[task]))
-            return return_task_outputs
-
+            return [self.forward(**value) for value in input_dict.values()]
         if encoder_outputs is None:
             inputs_patches=None
             if image is not None:
@@ -577,7 +578,7 @@ class UdopUnimodelForConditionalGeneration(T5ForConditionalGeneration):
         if decoder_input_ids is None and masked_lm_labels is None:
             return encoder_outputs
 
-        outputs = super().forward(
+        return super().forward(
             input_ids=input_ids,
             attention_mask=encoder_outputs.attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -593,8 +594,6 @@ class UdopUnimodelForConditionalGeneration(T5ForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return outputs  # type: ignore
     
     def get_encoder(self):
         return self

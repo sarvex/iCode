@@ -11,7 +11,7 @@ from torchvision.transforms import functional as F
 
 logger = logging.getLogger(__name__)
 PREFIX_CHECKPOINT_DIR = 'checkpoint'
-_re_checkpoint = re.compile(r'^' + PREFIX_CHECKPOINT_DIR + r'\-(\d+)$')
+_re_checkpoint = re.compile(f'^{PREFIX_CHECKPOINT_DIR}' + r'\-(\d+)$')
     
     
 def get_visual_bbox(image_size=224):
@@ -26,22 +26,19 @@ def get_visual_bbox(image_size=224):
         1.0 * (image_feature_pool_shape[0] + 1),
         1.0,
     ) / image_feature_pool_shape[0])
-    visual_bbox_input = torch.stack(
+    return torch.stack(
         [
-            visual_bbox_x[:-1].repeat(
-                image_feature_pool_shape[0], 1),
-            visual_bbox_y[:-1].repeat(
-                image_feature_pool_shape[1], 1).transpose(
-                    0, 1),
-            visual_bbox_x[1:].repeat(
-                image_feature_pool_shape[0], 1),
-            visual_bbox_y[1:].repeat(
-                image_feature_pool_shape[1], 1).transpose(
-                    0, 1),
+            visual_bbox_x[:-1].repeat(image_feature_pool_shape[0], 1),
+            visual_bbox_y[:-1]
+            .repeat(image_feature_pool_shape[1], 1)
+            .transpose(0, 1),
+            visual_bbox_x[1:].repeat(image_feature_pool_shape[0], 1),
+            visual_bbox_y[1:]
+            .repeat(image_feature_pool_shape[1], 1)
+            .transpose(0, 1),
         ],
         dim=-1,
     ).view(-1, 4)
-    return visual_bbox_input
 
 
 class Normalize(object):
@@ -63,16 +60,18 @@ class Normalize(object):
     
 def get_last_checkpoint(folder):
     content = os.listdir(folder)
-    checkpoints = [
-        path for path in content if _re_checkpoint.search(path) is not None
+    if checkpoints := [
+        path
+        for path in content
+        if _re_checkpoint.search(path) is not None
         and os.path.isdir(os.path.join(folder, path))
-    ]
-    if len(checkpoints) == 0:
+    ]:
+        return os.path.join(
+            folder,
+            max(checkpoints,
+                key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+    else:
         return
-    return os.path.join(
-        folder,
-        max(checkpoints,
-            key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
 def clamp(num, min_value, max_value):

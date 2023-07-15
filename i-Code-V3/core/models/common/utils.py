@@ -79,7 +79,7 @@ class get_unit(object):
             kwargs = {}
             for k, v in zip(args[::2], args[1::2]):
                 if v[0]=='(' and v[-1]==')':
-                    kwargs[k] = tuple([str2value(i) for i in v.strip('()').split(',')])
+                    kwargs[k] = tuple(str2value(i) for i in v.strip('()').split(','))
                 elif v[0]=='[' and v[-1]==']':
                     kwargs[k] = [str2value(i) for i in v.strip('[]').split(',')]
                 else:
@@ -96,7 +96,7 @@ class Sine(object):
     def __init__(self, freq, gain=1):
         self.freq = freq
         self.gain = gain
-        self.repr = 'sine(freq={}, gain={})'.format(freq, gain)
+        self.repr = f'sine(freq={freq}, gain={gain})'
 
     def __call__(self, x, gain=1):
         act_gain = self.gain * gain
@@ -123,13 +123,9 @@ class lrelu_agc(object):
     def __init__(self, alpha=0.1, gain=1, clamp=None):
         # super().__init__()
         self.alpha = alpha
-        if gain == 'sqrt_2':
-            self.gain = np.sqrt(2)
-        else:
-            self.gain = gain
+        self.gain = np.sqrt(2) if gain == 'sqrt_2' else gain
         self.clamp = clamp
-        self.repr = 'lrelu_agc(alpha={}, gain={}, clamp={})'.format(
-            alpha, gain, clamp)
+        self.repr = f'lrelu_agc(alpha={alpha}, gain={gain}, clamp={clamp})'
 
     # def forward(self, x, gain=1):
     def __call__(self, x, gain=1):
@@ -187,9 +183,7 @@ class SpatialEncoding(nn.Module):
             xshape = x.shape
             x = x.permute(0, 2, 3, 1).contiguous()
             x = x.view(-1, x.size(-1))
-        elif format == '[n x c]':
-            pass
-        else:
+        elif format != '[n x c]':
             raise ValueError
 
         if not self.require_grad:
@@ -206,9 +200,7 @@ class SpatialEncoding(nn.Module):
         return z
 
     def extra_repr(self):
-        outstr = 'SpatialEncoding (in={}, out={}, sigma={}, cat_input={}, require_grad={})'.format(
-            self.in_dim, self.out_dim, self.sigma, self.cat_input, self.require_grad)
-        return outstr
+        return f'SpatialEncoding (in={self.in_dim}, out={self.out_dim}, sigma={self.sigma}, cat_input={self.cat_input}, require_grad={self.require_grad})'
 
 @register('rffe')
 class RFFEncoding(SpatialEncoding):
@@ -230,9 +222,7 @@ class RFFEncoding(SpatialEncoding):
             self.emb = nn.Parameter(self.emb, requires_grad=True)    
 
     def extra_repr(self):
-        outstr = 'RFFEncoding (in={}, out={}, sigma={}, cat_input={}, require_grad={})'.format(
-            self.in_dim, self.out_dim, self.sigma, self.cat_input, self.require_grad)
-        return outstr
+        return f'RFFEncoding (in={self.in_dim}, out={self.out_dim}, sigma={self.sigma}, cat_input={self.cat_input}, require_grad={self.require_grad})'
 
 ##########
 # helper #
@@ -261,8 +251,6 @@ def common_init(m):
             nn.SyncBatchNorm,)):
         nn.init.constant_(m.weight, 1)
         nn.init.constant_(m.bias, 0)
-    else:
-        pass
 
 def init_module(module):
     """
@@ -270,11 +258,7 @@ def init_module(module):
         module: [nn.module] list or nn.module
             a list of module to be initialized.
     """
-    if isinstance(module, (list, tuple)):
-        module = list(module)
-    else:
-        module = [module]
-
+    module = list(module) if isinstance(module, (list, tuple)) else [module]
     for mi in module:
         for mii in mi.modules():
             common_init(mii)

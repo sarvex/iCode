@@ -42,13 +42,12 @@ class AutoencoderKL(nn.Module):
             x = rearrange(x, 'b c f h w -> (b f) c h w')
         else:
             is_video = False
-            
+
         h = self.encoder(x)
         moments = self.quant_conv(h)
         if is_video:
             moments = rearrange(moments, '(b f) c h w -> b c f h w', f=num_frames)
-        posterior = DiagonalGaussianDistribution(moments)
-        return posterior
+        return DiagonalGaussianDistribution(moments)
 
     def decode(self, z):
         if z.ndim == 5:
@@ -79,8 +78,7 @@ class AutoencoderKL(nn.Module):
         x = batch[k]
         if len(x.shape) == 3:
             x = x[..., None]
-        x = x.permute(0, 3, 1, 2).to(memory_format=torch.contiguous_format)
-        return x
+        return x.permute(0, 3, 1, 2).to(memory_format=torch.contiguous_format)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         inputs = self.get_input(batch, self.image_key)
@@ -133,7 +131,7 @@ class AutoencoderKL(nn.Module):
 
     @torch.no_grad()
     def log_images(self, batch, only_inputs=False, **kwargs):
-        log = dict()
+        log = {}
         x = self.get_input(batch, self.image_key)
         x = x.to(self.device)
         if not only_inputs:
@@ -168,9 +166,7 @@ class IdentityFirstStage(nn.Module):
         return x
 
     def quantize(self, x, *args, **kwargs):
-        if self.vq_interface:
-            return x, None, [None, None, None]
-        return x
+        return (x, None, [None, None, None]) if self.vq_interface else x
 
     def forward(self, x, *args, **kwargs):
         return x

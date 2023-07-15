@@ -97,7 +97,7 @@ class UdopTrainingArguments(TrainingArguments):
                         backend = 'mpi'
                     else:
                         backend = 'gloo'
-                logger.info('init process group using backend ' + backend)
+                logger.info(f'init process group using backend {backend}')
                 torch.distributed.init_process_group(
                     backend=backend, timeout=datetime.timedelta(days=1))
             device = torch.device('cuda', self.local_rank)

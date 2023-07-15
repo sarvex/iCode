@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 def count_trainable_parameters(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    return params
+    return sum(np.prod(p.size()) for p in model_parameters)
 
 
 class SavePredictionCallback(pl.Callback):

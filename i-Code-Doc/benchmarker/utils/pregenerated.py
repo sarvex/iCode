@@ -62,12 +62,16 @@ class PregeneratedDatasetBase(Dataset):
     def get_memmap(self, feature: str, filename: str) -> np.memmap:
         feat = FEAT_META[feature]
         try:
-            mmap = np.memmap(filename=self.memfile_path / (filename + '.memmap'),
-                             shape=tuple([self.num_samples] +
-                                         ([self.seq_len] if feat['wide'] else []) +
-                                         feat['dim']),
-                             mode=self.mode,
-                             dtype=feat['dtype'])
+            mmap = np.memmap(
+                filename=self.memfile_path / f'{filename}.memmap',
+                shape=tuple(
+                    [self.num_samples]
+                    + ([self.seq_len] if feat['wide'] else [])
+                    + feat['dim']
+                ),
+                mode=self.mode,
+                dtype=feat['dtype'],
+            )
         except Exception as e:
             logging.warning(f'Error during openining {filename} memmap')
             raise e
@@ -76,7 +80,7 @@ class PregeneratedDatasetBase(Dataset):
     def _create_segments(self, lvl: str):
         if lvl == 'tokens':
             return
-        elif lvl in ('lines', 'pages'):
+        elif lvl in {'lines', 'pages'}:
             self._create_lines_pages_segment(lvl)
         if lvl == 'pages':
             self._amend_pages_segment(lvl)
@@ -87,19 +91,31 @@ class PregeneratedDatasetBase(Dataset):
 
     def _create_lines_pages_segment(self, lvl: str):
         self.data['seg_data'][lvl] = {}
-        self.data['seg_data'][lvl]['bboxes'] = self.get_memmap('bboxes', lvl + '_bboxes')
-        self.data['seg_data'][lvl]['ranges'] = self.get_memmap('ranges', lvl + '_ranges')
-        self.data['seg_data'][lvl]['masks'] = self.get_memmap('masks', lvl + '_masks')
-        self.data['seg_data'][lvl]['token_map'] = self.get_memmap('token_map', lvl + '_token_ids')
+        self.data['seg_data'][lvl]['bboxes'] = self.get_memmap(
+            'bboxes', f'{lvl}_bboxes'
+        )
+        self.data['seg_data'][lvl]['ranges'] = self.get_memmap(
+            'ranges', f'{lvl}_ranges'
+        )
+        self.data['seg_data'][lvl]['masks'] = self.get_memmap('masks', f'{lvl}_masks')
+        self.data['seg_data'][lvl]['token_map'] = self.get_memmap(
+            'token_map', f'{lvl}_token_ids'
+        )
 
     def _amend_pages_segment(self, lvl: str):
-        self.data['seg_data'][lvl]['ordinals'] = self.get_memmap('ordinals', lvl + '_ordinals')
-        self.data['seg_data'][lvl]['cardinality'] = self.get_memmap('cardinality', lvl + '_cardinality')
+        self.data['seg_data'][lvl]['ordinals'] = self.get_memmap(
+            'ordinals', f'{lvl}_ordinals'
+        )
+        self.data['seg_data'][lvl]['cardinality'] = self.get_memmap(
+            'cardinality', f'{lvl}_cardinality'
+        )
 
     def _create_images_segment(self, lvl: str):
         self.data['seg_data'][lvl] = {}
         try:
-            self.data['seg_data'][lvl]['img_data'] = self.get_memmap('img_data', lvl + '_img_data')
+            self.data['seg_data'][lvl]['img_data'] = self.get_memmap(
+                'img_data', f'{lvl}_img_data'
+            )
         except FileNotFoundError:
             img_meta = FEAT_META['img_data']
             one_img_shape = tuple([1] + img_meta['dim'])
@@ -223,8 +239,7 @@ class PregeneratedDatasetBase(Dataset):
         """
         im = convert_from_path(im_path)[0]
         img_lst = img_trans_torchvision(im, self.img_conf['size'])
-        item_dict['seg_data']['lazyimages'] = {}
-        item_dict['seg_data']['lazyimages']['img_lst'] = img_lst
+        item_dict['seg_data']['lazyimages'] = {'img_lst': img_lst}
         return item_dict
 
     def _get_images(self, impath: Optional[Path], item_dict: Dict[str, Any]) -> List[np.ndarray]:
@@ -251,10 +266,9 @@ class PregeneratedDatasetBase(Dataset):
         page_path = impath / f'{page_no}.png'
         if page_path.is_file():
             return self.open_image(page_path)
-        else:
-            logging.warning(f'Could not find a file {page_path}. Dummy image will be added')
-            # height = int(page_size[3] / page_size[2] * width)
-            return self._create_dummy_img(width, height, channels)
+        logging.warning(f'Could not find a file {page_path}. Dummy image will be added')
+        # height = int(page_size[3] / page_size[2] * width)
+        return self._create_dummy_img(width, height, channels)
 
     def open_image(self, page_path):
         """Opens image and convert it in accordance with config """
@@ -267,9 +281,7 @@ class PregeneratedDatasetBase(Dataset):
         if img.mode != 'L' and channels == 1:
             img = img.convert('L')
         new_size = (width, height)
-        img_resized = np.array(img.resize(new_size))
-
-        return img_resized
+        return np.array(img.resize(new_size))
 
     @staticmethod
     def _create_dummy_img(width: int, height: int, channels: int) -> np.ndarray:
@@ -327,9 +339,7 @@ class PregeneratedDatasetBase(Dataset):
         starty_img = np.mgrid[offset_y:height+offset_y:bbox_height][:num_of_rows]
         starty_img = np.tile(starty_img, imtok_per_width)
         endy_img = starty_img + bbox_height
-        bboxes = np.stack((startx_img, starty_img, endx_img, endy_img), axis=1)
-
-        return bboxes
+        return np.stack((startx_img, starty_img, endx_img, endy_img), axis=1)
 
     @classmethod
     def load_from_memmap(cls, path: Path, **kwargs) -> 'PregeneratedDatasetBase':
@@ -359,11 +369,7 @@ class PregeneratedCustomDataset(PregeneratedDatasetBase):
             assert self.tokenizer is not None
             self.vocab_size = len(tokenizer)
             self.seq_len = max_seq_length
-            if hasattr(input_data, '__len__'):
-                self.num_samples = len(input_data)
-            else:
-                # if input_data is generator and it is not known what will be size of it
-                self.num_samples = 1000
+            self.num_samples = len(input_data) if hasattr(input_data, '__len__') else 1000
         elif self.mode == 'r':
             assert self.metrics_file.is_file(), f'{self.metrics_file} is missing'
             metrics = json.loads(self.metrics_file.read_text())

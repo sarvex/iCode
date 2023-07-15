@@ -248,8 +248,7 @@ class FlaxCLIPTextEmbeddings(nn.Module):
         input_embeds = self.token_embedding(input_ids.astype("i4"))
         position_embeds = self.position_embedding(position_ids.astype("i4"))
 
-        embeddings = input_embeds + position_embeds
-        return embeddings
+        return input_embeds + position_embeds
 
 
 class FlaxCLIPAttention(nn.Module):
@@ -339,8 +338,7 @@ class FlaxCLIPAttention(nn.Module):
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
 
-        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
-        return outputs
+        return (attn_output, attn_weights) if output_attentions else (attn_output,)
 
 
 class FlaxCLIPMLP(nn.Module):
@@ -609,15 +607,14 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
 
         random_params = self.module.init(rngs, input_ids, attention_mask, position_ids)["params"]
 
-        if params is not None:
-            random_params = flatten_dict(unfreeze(random_params))
-            params = flatten_dict(unfreeze(params))
-            for missing_key in self._missing_keys:
-                params[missing_key] = random_params[missing_key]
-            self._missing_keys = set()
-            return freeze(unflatten_dict(params))
-        else:
+        if params is None:
             return random_params
+        random_params = flatten_dict(unfreeze(random_params))
+        params = flatten_dict(unfreeze(params))
+        for missing_key in self._missing_keys:
+            params[missing_key] = random_params[missing_key]
+        self._missing_keys = set()
+        return freeze(unflatten_dict(params))
 
     def __call__(
         self,
@@ -689,15 +686,14 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
 
         random_params = self.module.init(rngs, pixel_values)["params"]
 
-        if params is not None:
-            random_params = flatten_dict(unfreeze(random_params))
-            params = flatten_dict(unfreeze(params))
-            for missing_key in self._missing_keys:
-                params[missing_key] = random_params[missing_key]
-            self._missing_keys = set()
-            return freeze(unflatten_dict(params))
-        else:
+        if params is None:
             return random_params
+        random_params = flatten_dict(unfreeze(random_params))
+        params = flatten_dict(unfreeze(params))
+        for missing_key in self._missing_keys:
+            params[missing_key] = random_params[missing_key]
+        self._missing_keys = set()
+        return freeze(unflatten_dict(params))
 
     def __call__(
         self,
@@ -764,15 +760,14 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
 
         random_params = self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids)["params"]
 
-        if params is not None:
-            random_params = flatten_dict(unfreeze(random_params))
-            params = flatten_dict(unfreeze(params))
-            for missing_key in self._missing_keys:
-                params[missing_key] = random_params[missing_key]
-            self._missing_keys = set()
-            return freeze(unflatten_dict(params))
-        else:
+        if params is None:
             return random_params
+        random_params = flatten_dict(unfreeze(random_params))
+        params = flatten_dict(unfreeze(params))
+        for missing_key in self._missing_keys:
+            params[missing_key] = random_params[missing_key]
+        self._missing_keys = set()
+        return freeze(unflatten_dict(params))
 
     def __call__(
         self,

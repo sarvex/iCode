@@ -54,11 +54,11 @@ def main(args: Namespace, model: Optional[L5GenerationModule] = None, datamodule
 
 
 def setup_val_metrics(metric_names: List[str]):
-    valid_metrics = {}
-    for metric_name in metric_names:
-        if metric_name == 'accuracy':
-            valid_metrics['accuracy'] = Accuracy(compute_on_step=False)
-    return valid_metrics
+    return {
+        'accuracy': Accuracy(compute_on_step=False)
+        for metric_name in metric_names
+        if metric_name == 'accuracy'
+    }
 
 
 def setup_callbacks(args: Namespace, process_position=0) -> List[pl.Callback]:
@@ -70,10 +70,21 @@ def setup_callbacks(args: Namespace, process_position=0) -> List[pl.Callback]:
         callbacks.append(es_callback)
 
     lower_is_better = args.val_metric[0] == "loss"
-    callbacks.append(get_checkpoint_callback(args.output_dir, args.val_metric[0], args.save_top_k, lower_is_better))
-    callbacks.append(SavePredictionCallback())
-    callbacks.append(SaveTransformerCheckpoint(save_path=Path(args.output_dir) / 'best_tfmr'))
-    callbacks.append(CustomProgressBar(process_position=process_position))
+    callbacks.extend(
+        (
+            get_checkpoint_callback(
+                args.output_dir,
+                args.val_metric[0],
+                args.save_top_k,
+                lower_is_better,
+            ),
+            SavePredictionCallback(),
+            SaveTransformerCheckpoint(
+                save_path=Path(args.output_dir) / 'best_tfmr'
+            ),
+            CustomProgressBar(process_position=process_position),
+        )
+    )
     return callbacks
 
 # FIXME

@@ -34,7 +34,7 @@ def _pad_spec(fbank, target_length=1024):
 
 def pad_wav(waveform, segment_length):
     batch_size, waveform_length = waveform.shape
-    assert waveform_length > 100, "Waveform is too short, %s" % waveform_length
+    assert waveform_length > 100, f"Waveform is too short, {waveform_length}"
     if waveform_length == segment_length:
         return waveform
     elif waveform_length > segment_length:

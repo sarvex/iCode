@@ -137,8 +137,7 @@ class CoDi(DDPM):
     
     @torch.no_grad()
     def clap_encode_audio(self, audio):
-        embedding = self.clap(audio)
-        return embedding
+        return self.clap(audio)
 
     def forward(self, x=None, c=None, noise=None, xtype='image', ctype='prompt', u=None, return_algined_latents=False):
         if isinstance(x, list):
@@ -180,7 +179,7 @@ class CoDi(DDPM):
             model_output = self.apply_model(x_noisy, t, cond, xtype, ctype, u, return_algined_latents)
             if return_algined_latents:
                 return model_output
-            
+
             loss_dict = {}
 
             if self.parameterization == "x0":
@@ -189,21 +188,19 @@ class CoDi(DDPM):
                 target = noise
             else:
                 raise NotImplementedError()
-            
+
             loss = 0.0
             for model_output_i, target_i, xtype_i in zip(model_output, target, xtype):
-                if xtype_i == 'image':
+                if xtype_i in ['image', 'audio']:
                     loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3])
-                elif xtype_i == 'video':
-                    loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3, 4])
                 elif xtype_i == 'text':
                     loss_simple = self.get_text_loss(model_output_i, target_i).mean([1])
-                elif xtype_i == 'audio':
-                    loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3])
+                elif xtype_i == 'video':
+                    loss_simple = self.get_pixel_loss(model_output_i, target_i, mean=False).mean([1, 2, 3, 4])
                 loss += loss_simple.mean()
             return loss / len(xtype)
-        
-        else:    
+
+        else:
             noise = torch.randn_like(x_start) if noise is None else noise
             x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
             model_output = self.apply_model(x_noisy, t, cond, xtype, ctype)
@@ -217,13 +214,15 @@ class CoDi(DDPM):
             else:
                 raise NotImplementedError()
 
-            if xtype == 'image':
+            if (
+                xtype == 'image'
+                or xtype != 'video'
+                and xtype != 'text'
+                and xtype == 'audio'
+            ):
                 loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3])
             elif xtype == 'video':
                 loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3, 4])
             elif xtype == 'text':
                 loss_simple = self.get_text_loss(model_output, target).mean([1])
-            elif xtype == 'audio':
-                loss_simple = self.get_pixel_loss(model_output, target, mean=False).mean([1, 2, 3])
-            loss = loss_simple.mean()
-            return loss
+            return loss_simple.mean()

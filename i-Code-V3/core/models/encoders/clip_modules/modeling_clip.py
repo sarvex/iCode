@@ -164,9 +164,7 @@ class CLIPTextEmbeddings(nn.Module):
             inputs_embeds = self.token_embedding(input_ids)
 
         position_embeddings = self.position_embedding(position_ids)
-        embeddings = inputs_embeds + position_embeddings
-
-        return embeddings
+        return inputs_embeds + position_embeddings
 
 
 class CLIPAttention(nn.Module):
@@ -943,9 +941,7 @@ class CLIPModel(CLIPPreTrainedModel):
         )
 
         pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
-
-        return text_features
+        return self.text_projection(pooled_output)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
@@ -992,9 +988,7 @@ class CLIPModel(CLIPPreTrainedModel):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
+        return self.visual_projection(pooled_output)
 
     @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLIPOutput, config_class=CLIPConfig)
@@ -1071,10 +1065,7 @@ class CLIPModel(CLIPPreTrainedModel):
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.T
 
-        loss = None
-        if return_loss:
-            loss = clip_loss(logits_per_text)
-
+        loss = clip_loss(logits_per_text) if return_loss else None
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output

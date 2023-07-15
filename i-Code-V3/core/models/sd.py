@@ -45,7 +45,7 @@ def extract_into_tensor(a, t, x_shape):
 def highlight_print(info):
     print('')
     print(''.join(['#']*(len(info)+4)))
-    print('# '+info+' #')
+    print(f'# {info} #')
     print(''.join(['#']*(len(info)+4)))
     print('')
 
@@ -67,7 +67,7 @@ class DDPM(nn.Module):
 
                  l_simple_weight=1.,
                  original_elbo_weight=0.,
-                 
+
                  v_posterior=0., # weight for choosing posterior variance as sigma = (1-v) * beta_tilde + v * beta
                  parameterization="eps",
                  use_positional_encodings=False,
@@ -76,9 +76,9 @@ class DDPM(nn.Module):
 
         super().__init__()
         assert parameterization in ["eps", "x0"], \
-            'currently only supporting "eps" and "x0"'
+                'currently only supporting "eps" and "x0"'
         self.parameterization = parameterization
-        highlight_print("Running in {} mode".format(self.parameterization))
+        highlight_print(f"Running in {self.parameterization} mode")
 
         self.cond_stage_model = None
         self.clip_denoised = clip_denoised
@@ -246,9 +246,7 @@ class DDPM(nn.Module):
                                 clip_denoised=self.clip_denoised)
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
-        if return_intermediates:
-            return img, intermediates
-        return img
+        return (img, intermediates) if return_intermediates else img
 
     @torch.no_grad()
     def sample(self, batch_size=16, return_intermediates=False):
@@ -282,7 +280,6 @@ class DDPM(nn.Module):
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_out = self.model(x_noisy, t)
 
-        loss_dict = {}
         if self.parameterization == "eps":
             target = noise
         elif self.parameterization == "x0":
@@ -294,15 +291,15 @@ class DDPM(nn.Module):
 
         log_prefix = 'train' if self.training else 'val'
 
-        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_dict = {f'{log_prefix}/loss_simple': loss.mean()}
         loss_simple = loss.mean() * self.l_simple_weight
 
         loss_vlb = (self.lvlb_weights[t] * loss).mean()
-        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+        loss_dict[f'{log_prefix}/loss_vlb'] = loss_vlb
 
         loss = loss_simple + self.original_elbo_weight * loss_vlb
 
-        loss_dict.update({f'{log_prefix}/loss': loss})
+        loss_dict[f'{log_prefix}/loss'] = loss
 
         return loss, loss_dict
 

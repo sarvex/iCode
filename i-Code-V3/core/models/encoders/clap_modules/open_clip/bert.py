@@ -8,8 +8,7 @@ text = "Replace me by any text you'd like."
 def bert_embeddings(text):
     # text = "Replace me by any text you'd like."
     encoded_input = tokenizer(text, return_tensors="pt")
-    output = model(**encoded_input)
-    return output
+    return model(**encoded_input)
 
 
 from transformers import RobertaTokenizer, RobertaModel
@@ -22,8 +21,7 @@ text = "Replace me by any text you'd like."
 def Roberta_embeddings(text):
     # text = "Replace me by any text you'd like."
     encoded_input = tokenizer(text, return_tensors="pt")
-    output = model(**encoded_input)
-    return output
+    return model(**encoded_input)
 
 
 from transformers import BartTokenizer, BartModel
@@ -36,5 +34,4 @@ text = "Replace me by any text you'd like."
 def bart_embeddings(text):
     # text = "Replace me by any text you'd like."
     encoded_input = tokenizer(text, return_tensors="pt")
-    output = model(**encoded_input)
-    return output
+    return model(**encoded_input)

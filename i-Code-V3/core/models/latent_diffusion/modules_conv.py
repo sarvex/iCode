@@ -161,5 +161,5 @@ def noise_like(x, repeat=False):
     noise = torch.randn_like(x)
     if repeat:
         bs = x.shape[0]
-        noise = noise[0:1].repeat(bs, *((1,) * (len(x.shape) - 1)))
+        noise = noise[:1].repeat(bs, *((1,) * (len(x.shape) - 1)))
     return noise

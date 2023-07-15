@@ -166,11 +166,7 @@ class ResnetBlock(nn.Module):
         h = self.conv2(h)
 
         if self.in_channels != self.out_channels:
-            if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
-            else:
-                x = self.nin_shortcut(x)
-
+            x = self.conv_shortcut(x) if self.use_conv_shortcut else self.nin_shortcut(x)
         return x + h
 
 
@@ -291,7 +287,7 @@ class Model(nn.Module):
             attn = nn.ModuleList()
             block_in = ch * in_ch_mult[i_level]
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(
                     ResnetBlock(
                         in_channels=block_in,
@@ -447,10 +443,9 @@ class Encoder(nn.Module):
         self.downsample_time_stride4_levels = downsample_time_stride4_levels
 
         if len(self.downsample_time_stride4_levels) > 0:
-            assert max(self.downsample_time_stride4_levels) < self.num_resolutions, (
-                "The level to perform downsample 4 operation need to be smaller than the total resolution number %s"
-                % str(self.num_resolutions)
-            )
+            assert (
+                max(self.downsample_time_stride4_levels) < self.num_resolutions
+            ), f"The level to perform downsample 4 operation need to be smaller than the total resolution number {self.num_resolutions}"
 
         # downsampling
         self.conv_in = torch.nn.Conv2d(
@@ -466,7 +461,7 @@ class Encoder(nn.Module):
             attn = nn.ModuleList()
             block_in = ch * in_ch_mult[i_level]
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(
                     ResnetBlock(
                         in_channels=block_in,
@@ -514,7 +509,7 @@ class Encoder(nn.Module):
             stride=1,
             padding=1,
         )
-        
+
         self.swapped_to_float = False
 
     def forward(self, x):
@@ -585,10 +580,9 @@ class Decoder(nn.Module):
         self.downsample_time_stride4_levels = downsample_time_stride4_levels
 
         if len(self.downsample_time_stride4_levels) > 0:
-            assert max(self.downsample_time_stride4_levels) < self.num_resolutions, (
-                "The level to perform downsample 4 operation need to be smaller than the total resolution number %s"
-                % str(self.num_resolutions)
-            )
+            assert (
+                max(self.downsample_time_stride4_levels) < self.num_resolutions
+            ), f"The level to perform downsample 4 operation need to be smaller than the total resolution number {self.num_resolutions}"
 
         # compute in_ch_mult, block_in and curr_res at lowest res
         in_ch_mult = (1,) + tuple(ch_mult)
@@ -625,7 +619,7 @@ class Decoder(nn.Module):
             block = nn.ModuleList()
             attn = nn.ModuleList()
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
+            for _ in range(self.num_res_blocks + 1):
                 block.append(
                     ResnetBlock(
                         in_channels=block_in,
@@ -726,11 +720,7 @@ class SimpleDecoder(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.model):
-            if i in [1, 2, 3]:
-                x = layer(x, None)
-            else:
-                x = layer(x)
-
+            x = layer(x, None) if i in [1, 2, 3] else layer(x)
         h = self.norm_out(x)
         h = nonlinearity(h)
         x = self.conv_out(h)
@@ -760,7 +750,7 @@ class UpsampleDecoder(nn.Module):
         for i_level in range(self.num_resolutions):
             res_block = []
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
+            for _ in range(self.num_res_blocks + 1):
                 res_block.append(
                     ResnetBlock(
                         in_channels=block_in,
@@ -980,11 +970,6 @@ class Resize(nn.Module):
                 f"Note: {self.__class__.__name} uses learned downsampling and will ignore the fixed {mode} mode"
             )
             raise NotImplementedError()
-            assert in_channels is not None
-            # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv2d(
-                in_channels, in_channels, kernel_size=4, stride=2, padding=1
-            )
 
     def forward(self, x, scale_factor=1.0):
         if scale_factor == 1.0:

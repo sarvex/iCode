@@ -207,15 +207,17 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        (
+            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
+            + f"distributed training: {training_args.local_rank != -1}, 16-bits training: {training_args.fp16}"
+        )
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
-    
+
     logger.info(f"Training/evaluation parameters {training_args}")
     logger.info(f"Data arguments: {data_args}")
     logger.info(f"Model arguments: {model_args}")
@@ -223,7 +225,7 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
- 
+
     #if 'local' in model_args.model_name_or_path:
     if model_args.model_type in MODEL_CLASSES:
         config_type, model_type, tokenizer_type = MODEL_CLASSES[model_args.model_type]
@@ -255,7 +257,7 @@ def main():
     )
     model = model_type.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        from_tf=".ckpt" in model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
@@ -330,10 +332,10 @@ def main():
 
         predictions, labels, metrics = trainer.predict(eval_dataset)
         predictions = np.argmax(predictions, axis=1)
-        
+
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
-        
+
         true_predictions = [label_list[p] for (p, l) in zip(predictions, labels) ]
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")

@@ -14,8 +14,9 @@ class DataLoader(IterBaseClass, Generic[T], metaclass=ABCMeta):
         self._mandatory_levels: Sequence[str] = ('tokens', 'pages')
         self._segment_levels: Sequence[str] = tuple(set((list(segment_levels) if segment_levels
                                                       else []) + list(self._mandatory_levels)))
-        self._segment_levels_cleaned = tuple([s for s in self._segment_levels
-                                              if s in ("lines", "pages")])
+        self._segment_levels_cleaned = tuple(
+            s for s in self._segment_levels if s in ("lines", "pages")
+        )
         self._toklevel = 'tokens' in self._segment_levels
 
         self.inputs = iter(docs)

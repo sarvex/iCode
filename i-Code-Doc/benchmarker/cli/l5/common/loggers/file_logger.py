@@ -76,9 +76,7 @@ class FileExperimentWriter(object):
                 return value.item()
             if isinstance(value, np.ndarray):
                 return value.item()
-            if isinstance(value, np.float64):
-                return float(value)
-            return float(value)
+            return float(value) if isinstance(value, np.float64) else float(value)
 
         metrics = {k: _handle_value(v) for k, v in metrics_dict.items()}
 
@@ -118,7 +116,7 @@ class FileExperimentWriter(object):
 
         last_m = {}
         for m in self.metrics:
-            last_m.update(m)
+            last_m |= m
         metrics_keys = list(last_m.keys())
 
         with io.open(self.metrics_file_path, 'w', newline='') as f:

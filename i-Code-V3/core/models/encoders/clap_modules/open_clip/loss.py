@@ -64,53 +64,51 @@ def gather_features(
                         gathered_audio_features_mlp, dim=0
                     )
                     all_text_features_mlp = torch.cat(gathered_text_features_mlp, dim=0)
+    elif gather_with_grad:
+        all_audio_features = torch.cat(
+            torch.distributed.nn.all_gather(audio_features), dim=0
+        )
+        all_text_features = torch.cat(
+            torch.distributed.nn.all_gather(text_features), dim=0
+        )
+        if mlp_loss:
+            all_audio_features_mlp = torch.cat(
+                torch.distributed.nn.all_gather(audio_features_mlp), dim=0
+            )
+            all_text_features_mlp = torch.cat(
+                torch.distributed.nn.all_gather(text_features_mlp), dim=0
+            )
     else:
-        # We gather tensors from all gpus
-        if gather_with_grad:
-            all_audio_features = torch.cat(
-                torch.distributed.nn.all_gather(audio_features), dim=0
-            )
-            all_text_features = torch.cat(
-                torch.distributed.nn.all_gather(text_features), dim=0
-            )
-            if mlp_loss:
-                all_audio_features_mlp = torch.cat(
-                    torch.distributed.nn.all_gather(audio_features_mlp), dim=0
-                )
-                all_text_features_mlp = torch.cat(
-                    torch.distributed.nn.all_gather(text_features_mlp), dim=0
-                )
-        else:
-            gathered_audio_features = [
-                torch.zeros_like(audio_features) for _ in range(world_size)
+        gathered_audio_features = [
+            torch.zeros_like(audio_features) for _ in range(world_size)
+        ]
+        gathered_text_features = [
+            torch.zeros_like(text_features) for _ in range(world_size)
+        ]
+        dist.all_gather(gathered_audio_features, audio_features)
+        dist.all_gather(gathered_text_features, text_features)
+        if mlp_loss:
+            gathered_audio_features_mlp = [
+                torch.zeros_like(audio_features_mlp) for _ in range(world_size)
             ]
-            gathered_text_features = [
-                torch.zeros_like(text_features) for _ in range(world_size)
+            gathered_text_features_mlp = [
+                torch.zeros_like(text_features_mlp) for _ in range(world_size)
             ]
-            dist.all_gather(gathered_audio_features, audio_features)
-            dist.all_gather(gathered_text_features, text_features)
+            dist.all_gather(gathered_audio_features_mlp, audio_features_mlp)
+            dist.all_gather(gathered_text_features_mlp, text_features_mlp)
+        if not local_loss:
+            # ensure grads for local rank when all_* features don't have a gradient
+            gathered_audio_features[rank] = audio_features
+            gathered_text_features[rank] = text_features
             if mlp_loss:
-                gathered_audio_features_mlp = [
-                    torch.zeros_like(audio_features_mlp) for _ in range(world_size)
-                ]
-                gathered_text_features_mlp = [
-                    torch.zeros_like(text_features_mlp) for _ in range(world_size)
-                ]
-                dist.all_gather(gathered_audio_features_mlp, audio_features_mlp)
-                dist.all_gather(gathered_text_features_mlp, text_features_mlp)
-            if not local_loss:
-                # ensure grads for local rank when all_* features don't have a gradient
-                gathered_audio_features[rank] = audio_features
-                gathered_text_features[rank] = text_features
-                if mlp_loss:
-                    gathered_audio_features_mlp[rank] = audio_features_mlp
-                    gathered_text_features_mlp[rank] = text_features_mlp
+                gathered_audio_features_mlp[rank] = audio_features_mlp
+                gathered_text_features_mlp[rank] = text_features_mlp
 
-            all_audio_features = torch.cat(gathered_audio_features, dim=0)
-            all_text_features = torch.cat(gathered_text_features, dim=0)
-            if mlp_loss:
-                all_audio_features_mlp = torch.cat(gathered_audio_features_mlp, dim=0)
-                all_text_features_mlp = torch.cat(gathered_text_features_mlp, dim=0)
+        all_audio_features = torch.cat(gathered_audio_features, dim=0)
+        all_text_features = torch.cat(gathered_text_features, dim=0)
+        if mlp_loss:
+            all_audio_features_mlp = torch.cat(gathered_audio_features_mlp, dim=0)
+            all_text_features_mlp = torch.cat(gathered_text_features_mlp, dim=0)
     if mlp_loss:
         return (
             all_audio_features,
@@ -142,7 +140,7 @@ class ClipLoss(nn.Module):
         self.world_size = world_size
         self.use_horovod = use_horovod
         self.mlp_loss = mlp_loss
-        self.weighted_loss = bool(weight_loss_kappa != 0)
+        self.weighted_loss = weight_loss_kappa != 0
         self.weight_loss_kappa = weight_loss_kappa
         # cache state
         self.prev_num_logits = 0
@@ -355,8 +353,7 @@ def get_mauc(pred, target):
 class LPMetrics(object):
     def __init__(self, metric_names=["map", "acc", "mauc"]):
         self.metrics = []
-        for name in metric_names:
-            self.metrics.append(self.get_metric(name))
+        self.metrics.extend(self.get_metric(name) for name in metric_names)
         self.metric_names = metric_names
 
     def get_metric(self, name):
@@ -367,13 +364,13 @@ class LPMetrics(object):
         elif name == "mauc":
             return get_mauc
         else:
-            raise ValueError(f"the metric should be at least one of [map, acc, mauc]")
+            raise ValueError("the metric should be at least one of [map, acc, mauc]")
 
     def evaluate_mertics(self, pred, target):
-        metric_dict = {}
-        for i in range(len(self.metric_names)):
-            metric_dict[self.metric_names[i]] = self.metrics[i](pred, target)
-        return metric_dict
+        return {
+            self.metric_names[i]: self.metrics[i](pred, target)
+            for i in range(len(self.metric_names))
+        }
 
 
 def calc_celoss(pred, target):
@@ -391,8 +388,7 @@ class LPLoss(nn.Module):
         elif loss_name == "mse":
             self.loss_func = nn.MSELoss()
         else:
-            raise ValueError(f"the loss func should be at least one of [bce, ce, mse]")
+            raise ValueError("the loss func should be at least one of [bce, ce, mse]")
 
     def forward(self, pred, target):
-        loss = self.loss_func(pred, target)
-        return loss
+        return self.loss_func(pred, target)

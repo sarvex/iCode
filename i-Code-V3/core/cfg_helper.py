@@ -21,7 +21,7 @@ from core.models import get_model
 def cfg_solvef(cmd, root):
     if not isinstance(cmd, str):
         return cmd
-    
+
     if cmd.find('SAME')==0:
         zoom = root
         p = cmd[len('SAME'):].strip('()').split('.')
@@ -49,7 +49,7 @@ def cfg_solvef(cmd, root):
                 pi = int(pi)
             except:
                 pass
-            
+
             try:
                 zoom = zoom[pi]
             except:
@@ -58,18 +58,17 @@ def cfg_solvef(cmd, root):
 
         if find:
             return cfg_solvef(zoom, root)
-        else:
-            if isinstance(root, dict):
-                for ri in root:
-                    rv = cfg_solvef(cmd, root[ri])
-                    if rv != cmd:
-                        return rv
-            if isinstance(root, list):
-                for ri in root:
-                    rv = cfg_solvef(cmd, ri)
-                    if rv != cmd:
-                        return rv
-            return cmd
+        if isinstance(root, dict):
+            for ri in root:
+                rv = cfg_solvef(cmd, root[ri])
+                if rv != cmd:
+                    return rv
+        if isinstance(root, list):
+            for ri in root:
+                rv = cfg_solvef(cmd, ri)
+                if rv != cmd:
+                    return rv
+        return cmd
 
     if cmd.find('MODEL')==0:
         goto = cmd[len('MODEL'):].strip('()')
@@ -279,16 +278,15 @@ class experiment_cfg_bank(object):
         return copy.deepcopy(cfg)
 
     def get_yaml_path(self, name):
-        return osp.join(
-            self.cfg_dir, name+'.yaml')
+        return osp.join(self.cfg_dir, f'{name}.yaml')
 
 def load_cfg_yaml(path):
     if osp.isfile(path):
         cfg_path = path
     elif osp.isfile(osp.join('configs', 'experiment', path)):
         cfg_path = osp.join('configs', 'experiment', path)
-    elif osp.isfile(osp.join('configs', 'experiment', path+'.yaml')):
-        cfg_path = osp.join('configs', 'experiment', path+'.yaml')
+    elif osp.isfile(osp.join('configs', 'experiment', f'{path}.yaml')):
+        cfg_path = osp.join('configs', 'experiment', f'{path}.yaml')
     else:
         assert False, 'No such config!'
 
@@ -339,7 +337,7 @@ def get_command_line_args():
     parser.add_argument('--nodes', type=int, default=1)
     parser.add_argument('--addr', type=str, default='127.0.0.1')
     parser.add_argument('--port', type=int, default=11233)
- 
+
     parser.add_argument('--signature', nargs='+', type=str)
     parser.add_argument('--seed', type=int)
 
@@ -369,11 +367,11 @@ def get_command_line_args():
     cfg.env.gpu_device = [0] if args.gpu is None else list(args.gpu)
     cfg.env.master_addr = args.addr
     cfg.env.master_port = args.port
-    cfg.env.dist_url = 'tcp://{}:{}'.format(args.addr, args.port)
+    cfg.env.dist_url = f'tcp://{args.addr}:{args.port}'
     cfg.env.node_rank = args.node_rank
     cfg.env.nodes = args.nodes
 
-    istrain = False if args.eval is not None else True
+    istrain = args.eval is None
     isdebug = cfg.env.debug
 
     if istrain:
@@ -396,13 +394,10 @@ def get_command_line_args():
             cfg.eval.signature = ['debug']
 
         if args.eval_subdir is not None:
-            if isdebug:
-                cfg.eval.eval_subdir = 'debug'
-            else:
-                cfg.eval.eval_subdir = args.eval_subdir
+            cfg.eval.eval_subdir = 'debug' if isdebug else args.eval_subdir
         if args.pretrained is not None:
             cfg.eval.pretrained = args.pretrained 
-          # The override pretrained over the setting in cfg.model
+              # The override pretrained over the setting in cfg.model
 
     if args.seed is not None:
         cfg.env.rnd_seed = args.seed
@@ -421,7 +416,7 @@ def cfg_initiates(cfg):
     ###############################
     # get some environment params #
     ###############################
-    
+
     cfge.computer = os.uname()
     cfge.torch_version = str(torch.__version__)
 
@@ -467,7 +462,7 @@ def cfg_initiates(cfg):
             os.environ['NCCL_SOCKET_FAMILY'] = 'AF_INET'
         if cfg.env.dist_backend=='gloo':
             os.environ['GLOO_SOCKET_FAMILY'] = 'AF_INET'
-    
+
     #######################
     # cuda visible device #
     #######################
@@ -492,7 +487,7 @@ def cfg_initiates(cfg):
     ##########################################
     # align batch size and num worker config #
     ##########################################
- 
+
     gpu_n = cfge.gpu_count * cfge.nodes
     def align_batch_size(bs, bs_per_gpu): 
         assert (bs is not None) or (bs_per_gpu is not None)
@@ -549,10 +544,7 @@ def cfg_initiates(cfg):
         log_dir = osp.join(cfge.log_root_dir, '{}_{}'.format(model_symbol, dataset_symbol))
         exp_dir = search_experiment_folder(log_dir, cfge.experiment_id)
         if exp_dir is None:
-            if not isdebug:
-                sig = cfgv.get('signature', []) + ['evalonly']
-            else:
-                sig = ['debug']
+            sig = cfgv.get('signature', []) + ['evalonly'] if not isdebug else ['debug']
             exp_dir = '_'.join([str(cfge.experiment_id)] + sig)
 
         eval_subdir = cfgv.get('eval_subdir', None)
@@ -624,15 +616,9 @@ def cfg_initiates(cfg):
 
 def edict_2_dict(x):
     if isinstance(x, dict):
-        xnew = {}
-        for k in x:
-            xnew[k] = edict_2_dict(x[k])
-        return xnew
+        return {k: edict_2_dict(x[k]) for k in x}
     elif isinstance(x, list):
-        xnew = []
-        for i in range(len(x)):
-            xnew.append( edict_2_dict(x[i]) )
-        return xnew
+        return [edict_2_dict(x[i]) for i in range(len(x))]
     else:
         return x
 
@@ -642,8 +628,8 @@ def search_experiment_folder(root, exid):
         if not osp.isdir(osp.join(root, fi)):
             continue
         if int(fi.split('_')[0]) == exid:
-            if target is not None:
-                return None # duplicated
-            elif target is None:
+            if target is None:
                 target = fi
+            else:
+                return None # duplicated
     return target

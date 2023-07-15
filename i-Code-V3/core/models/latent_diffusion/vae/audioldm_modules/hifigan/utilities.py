@@ -40,7 +40,7 @@ HIFIGAN_16K_64 = {
 
 
 def get_available_checkpoint_keys(model, ckpt):
-    print("==> Attemp to reload from %s" % ckpt)
+    print(f"==> Attemp to reload from {ckpt}")
     state_dict = torch.load(ckpt)["state_dict"]
     current_state_dict = model.state_dict()
     new_state_dict = {}
@@ -51,17 +51,15 @@ def get_available_checkpoint_keys(model, ckpt):
         ):
             new_state_dict[k] = state_dict[k]
         else:
-            print("==> WARNING: Skipping %s" % k)
+            print(f"==> WARNING: Skipping {k}")
     print(
-        "%s out of %s keys are matched"
-        % (len(new_state_dict.keys()), len(state_dict.keys()))
+        f"{len(new_state_dict.keys())} out of {len(state_dict.keys())} keys are matched"
     )
     return new_state_dict
 
 
 def get_param_num(model):
-    num_param = sum(param.numel() for param in model.parameters())
-    return num_param
+    return sum(param.numel() for param in model.parameters())
 
 
 def get_vocoder(config, device):

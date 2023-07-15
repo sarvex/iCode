@@ -15,8 +15,8 @@ def main(test_generation, reference_path, outpath):
             try:
                 line = json.loads(line)
                 doc_id = line['doc_id'].split('__')[0]
-            
-                if not (line['label_name'], line['preds']) in data[doc_id]:
+
+                if (line['label_name'], line['preds']) not in data[doc_id]:
                     data[doc_id].append((line['label_name'], line['preds']))
             except:
                 print('error line:', line)

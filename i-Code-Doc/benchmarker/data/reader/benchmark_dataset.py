@@ -19,10 +19,9 @@ def get_value(annotation_value: Dict) -> List:
 
 
 def get_child_values(annotation_values: List[Dict]) -> List:
-    values: List = []
-    for annotation_value in annotation_values:
-        values += [annotation_value['value']]
-
+    values: List = [
+        annotation_value['value'] for annotation_value in annotation_values
+    ]
     return values
 
 
@@ -39,7 +38,7 @@ class BenchmarkDataset(Dataset):
     def __iter__(self) -> Iterator[Document]:
         docs_jsonl_path = self.directory / self.split / 'document.jsonl'
         docs_content_jsonl_path = self.directory / self.split / 'documents_content.jsonl'
-        with open(docs_jsonl_path) as docs_file, open(docs_content_jsonl_path) as docs_content_file:
+        with (open(docs_jsonl_path) as docs_file, open(docs_content_jsonl_path) as docs_content_file):
             for doc_line, doc_content in zip(docs_file, docs_content_file):
                 doc_dict = json.loads(doc_line)
                 identifier = f'{doc_dict["name"]}'
@@ -64,7 +63,7 @@ class BenchmarkDataset(Dataset):
                     question = annotation['key']
 
                     values = []
-                    for i, value in enumerate(annotation['values']):
+                    for value in annotation['values']:
                         if 'children' in value:
                             # XXX: this part could be specific to PWC dataset and might need some changes
                             # for different datasets with 'children' keys
@@ -77,8 +76,7 @@ class BenchmarkDataset(Dataset):
                     if values:
                         annotations[question] = values
 
-                    document = Document(identifier, doc2d, annotations)
-                    yield document
+                    yield Document(identifier, doc2d, annotations)
 
     def output_prefix(self, value: str) -> str:
         """Format key as output_prefix (e.g, append "=").
@@ -98,6 +96,6 @@ class BenchmarkDataset(Dataset):
 class BenchmarkCorpusMixin:
     def read_benchmark_challenge(self, directory: Union[str, Path], **kwargs):
         for split in ['train', 'dev', 'test']:
-            inner_attribute = '_' + split
+            inner_attribute = f'_{split}'
             setattr(self, inner_attribute, BenchmarkDataset(directory, split, **kwargs))
 

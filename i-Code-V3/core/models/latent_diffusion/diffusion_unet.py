@@ -77,9 +77,9 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
                     x = layer(x, context)
             elif isinstance(layer, SpatioTemporalAttention):
                 x = layer(x, x_0)
-            elif isinstance(layer, VideoSequential) or isinstance(layer, nn.ModuleList):
+            elif isinstance(layer, (VideoSequential, nn.ModuleList)):
                 x = layer[0](x, emb)    
-                x = layer[1](x, x_0)    
+                x = layer[1](x, x_0)
             else:
                 if is_video:
                     x = rearrange(x, 'b c t h w -> (b t) c h w ')
@@ -816,9 +816,7 @@ class FCBlock(TimestepBlock):
     def forward(self, x, emb):
         if len(x.shape) == 2:
             x = x[:, :, None, None]
-        elif len(x.shape) == 4:
-            pass
-        else:
+        elif len(x.shape) != 4:
             raise ValueError
         y = checkpoint(
             self._forward, (x, emb), self.parameters(), self.use_checkpoint)
@@ -852,9 +850,9 @@ class Linear_MultiDim(nn.Linear):
     def forward(self, x):
         shape = x.shape
         n = len(self.in_features_multidim)
-        x = x.reshape(*shape[0:-n], self.in_features)
+        x = x.reshape(*shape[:-n], self.in_features)
         y = super().forward(x)
-        y = y.view(*shape[0:-n], *self.out_features_multidim)
+        y = y.view(*shape[:-n], *self.out_features_multidim)
         return y
 
     
@@ -889,12 +887,12 @@ class FCBlock_MultiDim(FCBlock):
     def forward(self, x, emb):
         shape = x.shape
         n = len(self.channels_multidim)
-        x = x.reshape(*shape[0:-n], self.channels, 1, 1)
+        x = x.reshape(*shape[:-n], self.channels, 1, 1)
         x = x.view(-1, self.channels, 1, 1)
         y = checkpoint(
             self._forward, (x, emb), self.parameters(), self.use_checkpoint)
-        y = y.view(*shape[0:-n], -1)
-        y = y.view(*shape[0:-n], *self.out_channels_multidim)
+        y = y.view(*shape[:-n], -1)
+        y = y.view(*shape[:-n], *self.out_channels_multidim)
         return y
 
     
@@ -1097,13 +1095,13 @@ def create_dummy_class():
 
     dummy_class_item.input_blocks = []
     dummy_class_item.input_block_connecters_in = []
-    for i in range(12):
+    for _ in range(12):
         dummy_class_item.input_blocks.append(range(2))
         dummy_class_item.input_block_connecters_in.append(None)
     dummy_class_item.middle_block = range(3)
     dummy_class_item.output_blocks = []
     dummy_class_item.output_block_connecters_in = []
-    for i in range(12):
+    for _ in range(12):
         dummy_class_item.output_blocks.append(range(2))
         dummy_class_item.output_block_connecters_in.append(None)
     return dummy_class_item            
@@ -1149,7 +1147,7 @@ class UNetModelCoDi(nn.Module):
         context = 0.0
         for i in range(len(condition)):
             context += condition[i] * norm_weights[i]
-        
+
         if x_0_type == 'first_last_frame' and x_0[0]:
             hs = []
             x = x[0].cuda()
@@ -1174,8 +1172,8 @@ class UNetModelCoDi(nn.Module):
             out = self.unet_video_interp.out(h)  
             out = rearrange(out, '(b t) c h w -> b c t h w', t=num_frames)
             return [out]
-    
-        
+
+
         # Prepare inputs
         hs = []
         x = [temp.cuda() for temp in x]
@@ -1200,7 +1198,7 @@ class UNetModelCoDi(nn.Module):
 
         # Environment encoders
         if len(xtype) > 1: # this means two outputs present and thus joint decoding
-            h_con = [temp for temp in x]        
+            h_con = list(x)
             for i_con_in, t_con_in, a_con_in in zip(
                 self.unet_image.connecters_out, self.unet_text.connecters_out, self.unet_audio.connecters_out,
                 ):
@@ -1221,16 +1219,15 @@ class UNetModelCoDi(nn.Module):
                 h_con[i] = h_con[i] / th.norm(h_con[i], dim=-1, keepdim=True)
         else:
             h_con = None
-        
+
         # Joint / single generation
         h = x
         for (i_module, t_module, a_module,
-            i_con_in, t_con_in, a_con_in) \
-        in zip(
+            i_con_in, t_con_in, a_con_in) in zip(
             self.unet_image.input_blocks, self.unet_text.input_blocks, self.unet_audio.input_blocks,
             self.unet_image.input_block_connecters_in, self.unet_text.input_block_connecters_in, self.unet_audio.input_block_connecters_in, 
             ):
-            h = [h_i for h_i in h]
+            h = list(h)
             for i, xtype_i in enumerate(xtype):
                 if xtype_i == 'audio':
                     h[i] = a_module(h[i], emb_audio, context, x_0[i])
@@ -1268,7 +1265,7 @@ class UNetModelCoDi(nn.Module):
 
         for (i_module, t_module, a_module, 
             i_con_in, t_con_in, a_con_in,) \
-        in zip(
+            in zip(
             self.unet_image.output_blocks, self.unet_text.output_blocks, self.unet_audio.output_blocks, 
             self.unet_image.output_block_connecters_in, self.unet_text.output_block_connecters_in, self.unet_audio.output_block_connecters_in,
             ):

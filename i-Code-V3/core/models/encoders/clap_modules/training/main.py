@@ -88,9 +88,7 @@ def update_top_k_performance(
         sorted_values = sorted(sorted_values, reverse=bignumbetter)
         sorted_values = sorted_values[:-1]
 
-        if sorted_values == sorted_values_:
-            return current_top_k_ckpt_metrics, new_metrics_inputs
-        else:
+        if sorted_values != sorted_values_:
             for i in range(len(sorted_keys)):
                 if current_top_k_ckpt_metrics[sorted_keys[i]] != sorted_values[i]:
                     current_top_k_ckpt_metrics[sorted_keys[i]] = sorted_values[i]
@@ -103,7 +101,7 @@ def update_top_k_performance(
                         os.path.join(args.checkpoint_path, f"epoch_top_{i}.pt"),
                     )
                     break
-            return current_top_k_ckpt_metrics, new_metrics_inputs
+        return current_top_k_ckpt_metrics, new_metrics_inputs
 
 
 # def updateifNone(a, b):

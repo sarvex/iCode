@@ -309,17 +309,11 @@ class DDPM(nn.Module):
         if self.use_ema:
             self.model_ema.store(self.model.parameters())
             self.model_ema.copy_to(self.model)
-            if context is not None:
-                # print(f"{context}: Switched to EMA weights")
-                pass
         try:
             yield None
         finally:
             if self.use_ema:
                 self.model_ema.restore(self.model.parameters())
-                if context is not None:
-                    # print(f"{context}: Restored training weights")
-                    pass
 
     def q_mean_variance(self, x_start, t):
         """
@@ -398,9 +392,7 @@ class DDPM(nn.Module):
             )
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
-        if return_intermediates:
-            return img, intermediates
-        return img
+        return (img, intermediates) if return_intermediates else img
 
     @torch.no_grad()
     def sample(self, batch_size=16, return_intermediates=False):
@@ -425,11 +417,12 @@ class DDPM(nn.Module):
     def get_input(self, batch, k):
         # fbank, log_magnitudes_stft, label_indices, fname, waveform, clip_label, text = batch
         fbank, log_magnitudes_stft, label_indices, fname, waveform, text = batch
-        ret = {}
+        ret = {
+            "fbank": fbank.unsqueeze(1)
+            .to(memory_format=torch.contiguous_format)
+            .float()
+        }
 
-        ret["fbank"] = (
-            fbank.unsqueeze(1).to(memory_format=torch.contiguous_format).float()
-        )
         ret["stft"] = log_magnitudes_stft.to(
             memory_format=torch.contiguous_format
         ).float()

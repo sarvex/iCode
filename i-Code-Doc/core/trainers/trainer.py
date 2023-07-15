@@ -30,8 +30,7 @@ def unpatchify(x):
 
     x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
     x = torch.einsum('nhwpqc->nchpwq', x)
-    imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
-    return imgs
+    return x.reshape(shape=(x.shape[0], 3, h * p, h * p))
 
 
 def save_visualize_mae(image_output_, image_target, image_mask_label=None, output_dir=None):
@@ -79,15 +78,11 @@ class PretrainTrainer(transformers.trainer.Trainer):
 
         seed = self.args.data_seed if self.args.data_seed is not None else self.args.seed
 
+        samplers = {}
         if self.args.world_size <= 1:
-            samplers = {}
             for key in self.train_dataset:
-                samplers[key] = RandomSampler(self.train_dataset[key], generator=generator)                             
-            return samplers
-        
-            return RandomSampler(self.train_dataset, generator=generator)
+                samplers[key] = RandomSampler(self.train_dataset[key], generator=generator)
         else:
-            samplers = {}
             for key in self.train_dataset:
                 samplers[key] = (RandomSampler(self.train_dataset[key])
                                 if self.args.local_rank == -1
@@ -97,10 +92,11 @@ class PretrainTrainer(transformers.trainer.Trainer):
                                     rank=self.args.process_index,
                                     seed=seed,
                                 ))
-            return samplers
+
+        return samplers
 
     def get_train_dataloader(self) -> DataLoader:
-        
+
         """
         Returns the training [`~torch.utils.data.DataLoader`].
         Will use no sampler if `train_dataset` does not implement `__len__`, a random sampler (adapted to distributed
@@ -112,21 +108,20 @@ class PretrainTrainer(transformers.trainer.Trainer):
 
         train_sampler = self._get_train_sampler()
 
-        loaders = {}
-        for key in self.train_dataset:
-            loaders[key] = DataLoader(
-                                self.train_dataset[key],
-                                batch_size=self.args.train_batch_size,
-                                sampler=train_sampler[key],
-                                collate_fn=self.data_collator,
-                                drop_last=self.args.dataloader_drop_last,
-                                num_workers=self.args.dataloader_num_workers,
-                                pin_memory=self.args.dataloader_pin_memory,
-                                worker_init_fn=seed_worker,
-                            )
-        combined_loader = CombinedLoader(loaders, mode="max_size_cycle")
-
-        return combined_loader
+        loaders = {
+            key: DataLoader(
+                self.train_dataset[key],
+                batch_size=self.args.train_batch_size,
+                sampler=train_sampler[key],
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+                worker_init_fn=seed_worker,
+            )
+            for key in self.train_dataset
+        }
+        return CombinedLoader(loaders, mode="max_size_cycle")
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -148,8 +143,8 @@ class PretrainTrainer(transformers.trainer.Trainer):
         inputs = self._prepare_inputs(inputs)
         with self.compute_loss_context_manager():
             output = model(input_dict=inputs)
-                    
-        loss = sum([output_i['loss'] for output_i in output])
+
+        loss = sum(output_i['loss'] for output_i in output)
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
@@ -193,7 +188,4 @@ class PretrainTrainer(transformers.trainer.Trainer):
 
 def _model_unwrap(model: nn.Module) -> nn.Module:
     # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, 'module'):
-        return _model_unwrap(model.module)
-    else:
-        return model
+    return _model_unwrap(model.module) if hasattr(model, 'module') else model

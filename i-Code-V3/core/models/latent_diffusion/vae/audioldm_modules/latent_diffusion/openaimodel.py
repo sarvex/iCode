@@ -527,8 +527,8 @@ class UNetModel(nn.Module):
             linear(time_embed_dim, time_embed_dim),
         )
 
-        assert not (
-            self.num_classes is not None and self.extra_film_condition_dim is not None
+        assert (
+            self.num_classes is None or self.extra_film_condition_dim is None
         ), "As for the condition of theh UNet model, you can only set using class label or an extra embedding vector (such as from CLAP). You cannot set both num_classes and extra_film_condition_dim."
 
         if self.num_classes is not None:
@@ -549,14 +549,10 @@ class UNetModel(nn.Module):
             # elif(self.use_extra_film_by_concat):
             #     print("\t By addition with time embedding")
 
-        if use_spatial_transformer and (
-            self.use_extra_film_by_concat or self.use_extra_film_by_addition
-        ):
-            # print("+ Spatial transformer will only be used as self-attention. Because you have choose to use film as your global condition.")
-            spatial_transformer_no_context = True
-        else:
-            spatial_transformer_no_context = False
-
+        spatial_transformer_no_context = bool(
+            use_spatial_transformer
+            and (self.use_extra_film_by_concat or self.use_extra_film_by_addition)
+        )
         if use_spatial_transformer and not spatial_transformer_no_context:
             assert (
                 context_dim is not None
@@ -580,8 +576,8 @@ class UNetModel(nn.Module):
         )
         self._feature_size = model_channels
         input_block_chans = [model_channels]
-        ch = model_channels
         ds = 1
+        ch = model_channels
         for level, mult in enumerate(channel_mult):
             for _ in range(num_res_blocks):
                 layers = [
@@ -845,10 +841,7 @@ class UNetModel(nn.Module):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context)
         h = h.type(x.dtype)
-        if self.predict_codebook_ids:
-            return self.id_predictor(h)
-        else:
-            return self.out(h)
+        return self.id_predictor(h) if self.predict_codebook_ids else self.out(h)
 
 
 class EncoderUNetModel(nn.Module):
@@ -1063,7 +1056,7 @@ class EncoderUNetModel(nn.Module):
         if self.pool.startswith("spatial"):
             results.append(h.type(x.dtype).mean(dim=(2, 3)))
             h = th.cat(results, axis=-1)
-            return self.out(h)
         else:
             h = h.type(x.dtype)
-            return self.out(h)
+
+        return self.out(h)

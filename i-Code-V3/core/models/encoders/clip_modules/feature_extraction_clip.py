@@ -160,6 +160,4 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # return as BatchFeature
         data = {"pixel_values": images}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return BatchFeature(data=data, tensor_type=return_tensors)

@@ -40,10 +40,7 @@ class AverageMeter(object):
 
 
 def unwrap_model(model):
-    if hasattr(model, "module"):
-        return model.module
-    else:
-        return model
+    return model.module if hasattr(model, "module") else model
 
 
 def train_one_epoch(
@@ -112,7 +109,11 @@ def train_one_epoch(
             total_loss = loss(pred, class_label)
 
         if isinstance(optimizer, dict):
-            if scaler is not None:
+            if scaler is None:
+                total_loss.backward()
+                for o_ in optimizer.values():
+                    o_.step()
+            else:
                 scaler.scale(total_loss).backward()
                 for o_ in optimizer.values():
                     if args.horovod:
@@ -123,24 +124,19 @@ def train_one_epoch(
                     else:
                         scaler.step(o_)
                 scaler.update()
-            else:
-                total_loss.backward()
-                for o_ in optimizer.values():
-                    o_.step()
-        else:
-            if scaler is not None:
-                scaler.scale(total_loss).backward()
-                if args.horovod:
-                    optimizer.synchronize()
-                    scaler.unscale_(optimizer)
-                    with optimizer.skip_synchronize():
-                        scaler.step(optimizer)
-                else:
+        elif scaler is not None:
+            scaler.scale(total_loss).backward()
+            if args.horovod:
+                optimizer.synchronize()
+                scaler.unscale_(optimizer)
+                with optimizer.skip_synchronize():
                     scaler.step(optimizer)
-                scaler.update()
             else:
-                total_loss.backward()
-                optimizer.step()
+                scaler.step(optimizer)
+            scaler.update()
+        else:
+            total_loss.backward()
+            optimizer.step()
 
         # Note: we clamp to 4.6052 = ln(100), as in the original paper.
         with torch.no_grad():
@@ -152,10 +148,7 @@ def train_one_epoch(
         batch_count = i + 1
 
         if is_master(args) and (i % 100 == 0 or batch_count == num_batches_per_epoch):
-            if isinstance(audio, dict):
-                batch_size = len(audio["waveform"])
-            else:
-                batch_size = len(audio)
+            batch_size = len(audio["waveform"]) if isinstance(audio, dict) else len(audio)
             num_samples = batch_count * batch_size * args.world_size
             samples_per_epoch = dataloader.num_samples
             percent_complete = 100.0 * batch_count / num_batches_per_epoch
@@ -231,12 +224,10 @@ def evaluate(model, data, epoch, args, tb_writer=None, extra_suffix=""):
             dataloader, sampler = data["val"].dataloader, data["val"].sampler
             if args.distributed and sampler is not None:
                 sampler.set_epoch(epoch)
-            samples_per_val = dataloader.num_samples
         else:
             dataloader = data["val"].dataloader
             num_samples = 0
-            samples_per_val = dataloader.num_samples
-
+        samples_per_val = dataloader.num_samples
         eval_info = {"pred": [], "target": []}
         with torch.no_grad():
             for i, batch in enumerate(dataloader):
@@ -268,9 +259,9 @@ def evaluate(model, data, epoch, args, tb_writer=None, extra_suffix=""):
                 metric_dict = eval_tool.evaluate_mertics(
                     eval_info["pred"], eval_info["target"]
                 )
-                metrics.update(metric_dict)
+                metrics |= metric_dict
                 if "epoch" not in metrics.keys():
-                    metrics.update({"epoch": epoch})
+                    metrics["epoch"] = epoch
 
     if is_master(args):
         if not metrics:
@@ -296,6 +287,4 @@ def evaluate(model, data, epoch, args, tb_writer=None, extra_suffix=""):
             for name, val in metrics.items():
                 wandb.log({f"val{extra_suffix}/{name}": val, "epoch": epoch})
 
-        return metrics
-    else:
-        return metrics
+    return metrics

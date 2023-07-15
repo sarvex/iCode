@@ -19,7 +19,9 @@ def remove_duplicate_word(tx):
         combined_inputs = []
         if len(splitted_input)>1:
             for i in range(len(input)-1):
-                combined_inputs.append(input[i]+" "+last_word_of(splitted_input[i+1],length)) #add the last word of the right-neighbour (overlapping) sequence (before it has expanded), which is the next word in the original sentence
+                combined_inputs.append(
+                    f"{input[i]} {last_word_of(splitted_input[i + 1], length)}"
+                )
         return combined_inputs, length+1
 
     def remove_duplicates(input, length):
@@ -30,16 +32,11 @@ def remove_duplicate_word(tx):
                     del input[i + length - j]
                 bool_broke = True
                 break #break the for loop as the loop length does not matches the length of splitted_input anymore as we removed elements
-        if bool_broke:
-            return remove_duplicates(input, length) #if we found a duplicate, look for another duplicate of the same length
-        return input
+        return remove_duplicates(input, length) if bool_broke else input
 
     def last_word_of(input, length):
         splitted = input.split(" ")
-        if len(splitted)==0:
-            return input
-        else:
-            return splitted[length-1]
+        return input if len(splitted)==0 else splitted[length-1]
 
     def split_and_puncsplit(text):
         tx = text.split(" ")
@@ -100,11 +97,9 @@ def regularize_image(x, image_size=512):
         x = x.convert('RGB')
     elif isinstance(x, np.ndarray):
         x = Image.fromarray(x).convert('RGB')
-    elif isinstance(x, torch.Tensor):
-        pass
-    else:
+    elif not isinstance(x, torch.Tensor):
         assert False, 'Unknown image type'
-    
+
     transforms = T.Compose([
                 T.RandomCrop(min(x.size)),
                 T.Resize(
@@ -138,12 +133,11 @@ def center_crop(img, new_width=None, new_height=None):
 
     top = int(np.ceil((height - new_height) / 2))
     bottom = height - int(np.floor((height - new_height) / 2))
-    if len(img.shape) == 3:
-        center_cropped_img = img[:, top:bottom, left:right]
-    else:
-        center_cropped_img = img[:, top:bottom, left:right, ...]
-
-    return center_cropped_img
+    return (
+        img[:, top:bottom, left:right]
+        if len(img.shape) == 3
+        else img[:, top:bottom, left:right, ...]
+    )
 
 def _transform(n_px):
     return Compose([
@@ -184,8 +178,7 @@ def load_video(video_path, sample_duration=8.0, num_frames=8):
     else:            
         downsamlp_indices = np.linspace(0, video_frame_len-1, num_frames, endpoint=True).astype(np.int).tolist()
 
-    video = vr.get_batch(downsamlp_indices).asnumpy()
-    return video
+    return vr.get_batch(downsamlp_indices).asnumpy()
 
 
 ###############
@@ -229,7 +222,7 @@ def load_state_dict(net, cfg):
         assert (pretrained_pth is None) and \
                (pretrained_ckpt is None) and \
                (pretrained_pth_dm is None) and \
-               (pretrained_pth_ema is None), errmsg            
+               (pretrained_pth_ema is None), errmsg
         if pretrained_pth_full is not None:
             target_file = pretrained_pth_full
             sd = torch.load(target_file, map_location='cpu')
@@ -237,8 +230,7 @@ def load_state_dict(net, cfg):
         else:
             target_file = pretrained_ckpt_full
             sd = torch.load(target_file, map_location='cpu')['state_dict']
-        print('Load full model from [{}] strict [{}].'.format(
-            target_file, strict_sd))
+        print(f'Load full model from [{target_file}] strict [{strict_sd}].')
         net.load_state_dict(sd, strict=strict_sd)
 
     if pretrained_pth is not None or pretrained_ckpt is not None:
@@ -253,8 +245,7 @@ def load_state_dict(net, cfg):
         else:
             target_file = pretrained_ckpt
             sd = torch.load(target_file, map_location='cpu')['state_dict']
-        print('Load model from [{}] strict [{}].'.format(
-            target_file, strict_sd))
+        print(f'Load model from [{target_file}] strict [{strict_sd}].')
         sd_extra = [(ki, vi) for ki, vi in net.state_dict().items() \
             if ki.find('first_stage_model')==0 or ki.find('cond_stage_model')==0]
         sd.update(OrderedDict(sd_extra))
@@ -265,8 +256,7 @@ def load_state_dict(net, cfg):
                (pretrained_pth_full is None) and \
                (pretrained_pth is None) and \
                (pretrained_ckpt is None), errmsg
-        print('Load diffusion model from [{}] strict [{}].'.format(
-            pretrained_pth_dm, strict_sd))
+        print(f'Load diffusion model from [{pretrained_pth_dm}] strict [{strict_sd}].')
         sd = torch.load(pretrained_pth_dm, map_location='cpu')
         net.model.diffusion_model.load_state_dict(sd, strict=strict_sd)
 
@@ -275,14 +265,13 @@ def load_state_dict(net, cfg):
                (pretrained_pth_full is None) and \
                (pretrained_pth is None) and \
                (pretrained_ckpt is None), errmsg
-        print('Load unet ema model from [{}] strict [{}].'.format(
-            pretrained_pth_ema, strict_sd))
+        print(f'Load unet ema model from [{pretrained_pth_ema}] strict [{strict_sd}].')
         sd = torch.load(pretrained_pth_ema, map_location='cpu')
         net.model_ema.load_state_dict(sd, strict=strict_sd)
 
 def auto_merge_imlist(imlist, max=64):
-    imlist = imlist[0:max]
-    h, w = imlist[0].shape[0:2]
+    imlist = imlist[:max]
+    h, w = imlist[0].shape[:2]
     num_images = len(imlist)
     num_row = int(np.sqrt(num_images))
     num_col = num_images//num_row + 1 if num_images%num_row!=0 else num_images//num_row
@@ -332,9 +321,7 @@ class color_adjust(object):
         elif isinstance(x, torch.Tensor):
             x = torch.clamp(x, min=0.0, max=1.0)
             x = np.array(tvtrans.ToPILImage()(x))
-        elif isinstance(x, np.ndarray):
-            pass
-        else:
+        elif not isinstance(x, np.ndarray):
             raise ValueError
         x = x.astype(float)
         m = np.reshape(x, (-1, 3)).mean(0)
@@ -344,8 +331,7 @@ class color_adjust(object):
     def preprocess(self, x):
         m0, s0 = self.ref_from_stat
         m1, s1 = self.ref_to_stat
-        y = ((x-m0)/s0)*s1 + m1
-        return y
+        return ((x-m0)/s0)*s1 + m1
 
     def __call__(self, xin, keep=0, simple=False):
         xin, _, _ = self.get_data_and_stat(xin)
@@ -388,5 +374,4 @@ class color_adjust(object):
         t_d = np.interp(d_fo, d_to, xs)
         t_d[d_fo <= d_to[ 0]] = min_vto
         t_d[d_fo >= d_to[-1]] = max_vto
-        arr_out = np.interp(arr_in, xs, t_d)
-        return arr_out
+        return np.interp(arr_in, xs, t_d)

@@ -29,9 +29,7 @@ from .feature_fusion import iAFF, AFF, DAF
 # from PyTorch internals
 def _ntuple(n):
     def parse(x):
-        if isinstance(x, collections.abc.Iterable):
-            return x
-        return tuple(repeat(x, n))
+        return x if isinstance(x, collections.abc.Iterable) else tuple(repeat(x, n))
 
     return parse
 
@@ -59,8 +57,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     )  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
+    return x.div(keep_prob) * random_tensor
 
 
 class DropPath(nn.Module):
@@ -290,13 +287,13 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 
 def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
+    if mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    elif mode == "fan_in":
         denom = fan_in
     elif mode == "fan_out":
         denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
     variance = scale / denom
 
     if distribution == "truncated_normal":
@@ -325,10 +322,11 @@ def window_partition(x, window_size):
     """
     B, H, W, C = x.shape
     x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = (
-        x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    return (
+        x.permute(0, 1, 3, 2, 4, 5)
+        .contiguous()
+        .view(-1, window_size, window_size, C)
     )
-    return windows
 
 
 def window_reverse(windows, window_size, H, W):
@@ -449,10 +447,7 @@ class WindowAttention(nn.Module):
                 1
             ).unsqueeze(0)
             attn = attn.view(-1, self.num_heads, N, N)
-            attn = self.softmax(attn)
-        else:
-            attn = self.softmax(attn)
-
+        attn = self.softmax(attn)
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
@@ -569,9 +564,9 @@ class SwinTransformerBlock(nn.Module):
             )  # nW, window_size, window_size, 1
             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(
-                attn_mask != 0, float(-100.0)
-            ).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(
+                attn_mask == 0, 0.0
+            )
         else:
             attn_mask = None
 
@@ -989,7 +984,7 @@ class HTSAT_Swin_Transformer(nn.Module):
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             x, attn = layer(x)
         # for x
         x = self.norm(x)
@@ -1024,14 +1019,12 @@ class HTSAT_Swin_Transformer(nn.Module):
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
 
-        output_dict = {
+        return {
             "framewise_output": fpx,  # already sigmoided
             "clipwise_output": torch.sigmoid(x),
             "fine_grained_embedding": fine_grained_latent_output,
             "embedding": latent_output,
         }
-
-        return output_dict
 
     def crop_wav(self, x, crop_size, spe_pos=None):
         time_steps = x.shape[2]
@@ -1093,8 +1086,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             )
         x = x.permute(0, 1, 3, 2).contiguous()  # B C F T
         x = x[:, :, :, cur_pos : cur_pos + self.spec_size]
-        x = x.repeat(repeats=(1, 1, 4, 1))
-        return x
+        return x.repeat(repeats=(1, 1, 4, 1))
     
     def init_spec(self, example):
         window = "hann"
@@ -1139,7 +1131,7 @@ class HTSAT_Swin_Transformer(nn.Module):
             x = x["waveform"].to(device=device, non_blocking=True)
             if not hasattr(self, 'spectrogram_extractor'):
                 self.init_spec(x)
-            temp_dtype = x.dtype    
+            temp_dtype = x.dtype
             x = self.spectrogram_extractor(x.float())  # (batch_size, 1, time_steps, freq_bins)
             x = self.logmel_extractor(x).to(temp_dtype)  # (batch_size, 1, time_steps, mel_bins)
             x = x.transpose(1, 3)
@@ -1153,7 +1145,7 @@ class HTSAT_Swin_Transformer(nn.Module):
 
             dtype = x.dtype
             x = self.reshape_wav2img(x)
-            output_dict = self.forward_features(x)
+            return self.forward_features(x)
         else:
             longer_list = x["longer"].to(device=device, non_blocking=True)
             x = x["mel_fusion"].to(device=device, non_blocking=True)
@@ -1180,8 +1172,8 @@ class HTSAT_Swin_Transformer(nn.Module):
                         .contiguous()
                         .flatten(2)
                     )
-                    if fusion_x_local.size(-1) < FT:
-                        fusion_x_local = torch.cat(
+                    fusion_x_local = (
+                        torch.cat(
                             [
                                 fusion_x_local,
                                 torch.zeros(
@@ -1191,8 +1183,9 @@ class HTSAT_Swin_Transformer(nn.Module):
                             ],
                             dim=-1,
                         )
-                    else:
-                        fusion_x_local = fusion_x_local[:, :, :FT]
+                        if fusion_x_local.size(-1) < FT
+                        else fusion_x_local[:, :, :FT]
+                    )
                     # 1D fusion
                     new_x = new_x.squeeze(1).permute((0, 2, 1)).contiguous()
                     new_x[longer_list_idx] = self.fusion_model(
@@ -1211,11 +1204,7 @@ class HTSAT_Swin_Transformer(nn.Module):
                 x = do_mixup(x, mixup_lambda)
 
             x = self.reshape_wav2img(x)
-            output_dict = self.forward_features(x, longer_idx=longer_list_idx)
-
-        # We process the data in the dataloader part, in that here we only consider the input_T < fixed_T
-
-        return output_dict
+            return self.forward_features(x, longer_idx=longer_list_idx)
 
 
 def create_htsat_model(audio_cfg, enable_fusion=False, fusion_type="None", embed_shape=512, depth=[2, 2, 6, 2]):

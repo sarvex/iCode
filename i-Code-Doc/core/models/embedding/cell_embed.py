@@ -21,22 +21,22 @@ class CellEmbeddings(nn.Module):
         upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
         right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
         lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
-        if self.ccat:
-            embeddings = torch.cat(
+        return (
+            torch.cat(
                 [
                     left_position_embeddings,
                     upper_position_embeddings,
                     right_position_embeddings,
-                    lower_position_embeddings
+                    lower_position_embeddings,
                 ],
-                dim=-1)
-        else:
-            embeddings = (
+                dim=-1,
+            )
+            if self.ccat
+            else (
                 left_position_embeddings
                 + upper_position_embeddings
                 + right_position_embeddings
                 + lower_position_embeddings
             )
-
-        return embeddings
+        )
     

@@ -160,9 +160,7 @@ class Corpus(BenchmarkCorpusMixin):
                 else:
                     yield from self.doc_to_instances(doc, dataset, strategy)
 
-        if dataset is not None:
-            return generator()
-        return None
+        return generator() if dataset is not None else None
 
     @property
     def train(self) -> Optional[Iterator[DataInstance]]:

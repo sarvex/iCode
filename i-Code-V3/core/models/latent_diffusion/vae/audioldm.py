@@ -36,7 +36,7 @@ class AudioAutoencoderKL(nn.Module):
         self.subband = int(subband)
 
         if self.subband > 1:
-            print("Use subband decomposition %s" % self.subband)
+            print(f"Use subband decomposition {self.subband}")
 
         self.quant_conv = torch.nn.Conv2d(2 * ddconfig["z_channels"], 2 * embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
@@ -59,8 +59,7 @@ class AudioAutoencoderKL(nn.Module):
         x = self.freq_split_subband(x)
         h = self.encoder(x)
         moments = self.quant_conv(h)
-        posterior = DiagonalGaussianDistribution(moments)
-        return posterior
+        return DiagonalGaussianDistribution(moments)
 
     def decode(self, z):
         z = self.post_quant_conv(z)
@@ -70,17 +69,12 @@ class AudioAutoencoderKL(nn.Module):
 
     def decode_to_waveform(self, dec):
         dec = dec.squeeze(1).permute(0, 2, 1)
-        wav_reconstruction = vocoder_infer(dec, self.vocoder)
-        return wav_reconstruction
+        return vocoder_infer(dec, self.vocoder)
 
     def forward(self, input, sample_posterior=True):
         
         posterior = self.encode(input)
-        if sample_posterior:
-            z = posterior.sample()
-        else:
-            z = posterior.mode()
-
+        z = posterior.sample() if sample_posterior else posterior.mode()
         if self.flag_first_run:
             print("Latent size: ", z.size())
             self.flag_first_run = False

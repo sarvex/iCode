@@ -117,14 +117,11 @@ class STFT(torch.nn.Module):
             inverse_transform *= float(self.filter_length) / self.hop_length
 
         inverse_transform = inverse_transform[:, :, int(self.filter_length / 2) :]
-        inverse_transform = inverse_transform[:, :, : -int(self.filter_length / 2) :]
-
-        return inverse_transform
+        return inverse_transform[:, :, : -int(self.filter_length / 2) :]
 
     def forward(self, input_data):
         self.magnitude, self.phase = self.transform(input_data)
-        reconstruction = self.inverse(self.magnitude, self.phase)
-        return reconstruction
+        return self.inverse(self.magnitude, self.phase)
 
 
 class TacotronSTFT(torch.nn.Module):
@@ -149,12 +146,10 @@ class TacotronSTFT(torch.nn.Module):
         self.register_buffer("mel_basis", mel_basis)
 
     def spectral_normalize(self, magnitudes, normalize_fun):
-        output = dynamic_range_compression(magnitudes, normalize_fun)
-        return output
+        return dynamic_range_compression(magnitudes, normalize_fun)
 
     def spectral_de_normalize(self, magnitudes):
-        output = dynamic_range_decompression(magnitudes)
-        return output
+        return dynamic_range_decompression(magnitudes)
 
     def mel_spectrogram(self, y, normalize_fun=torch.log):
         """Computes mel-spectrograms from a batch of waves

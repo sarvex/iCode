@@ -33,7 +33,7 @@ def setup_registry(registry_name: str,
     }
 
     def build_x(cfg: Union[DictConfig, str, Namespace], *extra_args,
-                **extra_kwargs):
+                    **extra_kwargs):
 
         assert isinstance(cfg, str)
         choice = cfg
@@ -46,8 +46,8 @@ def setup_registry(registry_name: str,
             return None
 
         cls = REGISTRY[choice]
-        if hasattr(cls, 'build_' + registry_name):
-            builder = getattr(cls, 'build_' + registry_name)
+        if hasattr(cls, f'build_{registry_name}'):
+            builder = getattr(cls, f'build_{registry_name}')
         else:
             builder = cls
         return builder(cfg, *extra_args, **extra_kwargs)

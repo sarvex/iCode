@@ -57,9 +57,7 @@ def freeze_batch_norm_2d(module, module_match={}, name=""):
     Inspired by https://github.com/pytorch/pytorch/blob/a5895f85be0f10212791145bfedc0261d364f103/torch/nn/modules/batchnorm.py#L762
     """
     res = module
-    is_match = True
-    if module_match:
-        is_match = name in module_match
+    is_match = name in module_match if module_match else True
     if is_match and isinstance(
         module, (nn.modules.batchnorm.BatchNorm2d, nn.modules.batchnorm.SyncBatchNorm)
     ):
@@ -85,10 +83,7 @@ def exist(dataset_name, dataset_type):
     """
     Check if dataset exists
     """
-    if dataset_type in dataset_split[dataset_name]:
-        return True
-    else:
-        return False
+    return dataset_type in dataset_split[dataset_name]
 
 
 def get_tar_path_from_dataset_name(
@@ -133,12 +128,12 @@ def get_tar_path_from_txts(txt_path, islocal, proportion=1):
     """
     if isinstance(txt_path, (list, tuple)):
         return sum(
-            [
+            (
                 get_tar_path_from_txts(
                     txt_path[i], islocal=islocal, proportion=proportion
                 )
                 for i in range(len(txt_path))
-            ],
+            ),
             [],
         )
     if isinstance(txt_path, str):
@@ -157,7 +152,7 @@ def get_tar_path_from_txts(txt_path, islocal, proportion=1):
                 for i in range(len(lines))
             ]
         if proportion != 1:
-            print("Sampling tars with proportion of {}".format(proportion))
+            print(f"Sampling tars with proportion of {proportion}")
             lines = random.sample(lines, int(proportion * len(lines)))
         return lines
 
@@ -177,11 +172,10 @@ def do_mixup(x, mixup_lambda):
     Returns:
       out: (batch_size, ...)
     """
-    out = (
+    return (
         x.transpose(0, -1) * mixup_lambda
         + torch.flip(x, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
     ).transpose(0, -1)
-    return out
 
 
 def interpolate(x, ratio):
@@ -245,7 +239,6 @@ def get_data_from_log(txt_path):
     with open(txt_path) as f:
         lines = f.readlines()
     val_data = {}
-    train_data = {}
     train_losses = []
     train_losses_epoch = []
     for i in range(len(lines)):
@@ -268,11 +261,13 @@ def get_data_from_log(txt_path):
                 loss = float(lines[i].split("Loss: ")[-1].split(" (")[0])
                 train_losses.append(loss)
                 train_losses_epoch.append(num_epoch)
-    for i in range(len(train_losses)):
-        train_data[i] = {
+    train_data = {
+        i: {
             "num_epoch": train_losses_epoch[i],
             "train_loss": train_losses[i],
         }
+        for i in range(len(train_losses))
+    }
     return train_data, val_data
 
 
@@ -328,13 +323,13 @@ def load_class_label(path):
     # https://stackoverflow.com/questions/45693949/storing-strings-in-a-multiprocessing-sharedctypes-array
     out = None
     if path is not None:
-        if pathlib.Path(path).suffix in [".pkl", ".pickle"]:
+        if pathlib.Path(path).suffix in {".pkl", ".pickle"}:
             out = load_p(path)
-        elif pathlib.Path(path).suffix in [".json", ".txt"]:
+        elif pathlib.Path(path).suffix in {".json", ".txt"}:
             out = load_json(path)
-        elif pathlib.Path(path).suffix in [".npy", ".npz"]:
+        elif pathlib.Path(path).suffix in {".npy", ".npz"}:
             out = np.load(path)
-        elif pathlib.Path(path).suffix in [".csv"]:
+        elif pathlib.Path(path).suffix in {".csv"}:
             import pandas as pd
 
             out = pd.read_csv(path)

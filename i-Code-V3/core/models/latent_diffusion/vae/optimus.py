@@ -349,9 +349,7 @@ class optimus_vae(nn.Module):
 
             tmp.append(log_comp_ll - log_infer_ll)
 
-        ll_iw = log_sum_exp(torch.cat(tmp, dim=-1), dim=-1) - math.log(nsamples)
-
-        return ll_iw
+        return log_sum_exp(torch.cat(tmp, dim=-1), dim=-1) - math.log(nsamples)
 
     def KL(self, x):
         _, KL = self.encode(x, 1)
@@ -419,10 +417,7 @@ class optimus_vae(nn.Module):
         # (batch_size, k^2)
         log_comp = self.eval_complete_ll(x, grid_z)
 
-        # normalize to posterior
-        log_posterior = log_comp - log_sum_exp(log_comp, dim=1, keepdim=True)
-
-        return log_posterior
+        return log_comp - log_sum_exp(log_comp, dim=1, keepdim=True)
 
     def sample_from_inference(self, x, nsamples=1):
         """perform sampling from inference net
@@ -517,15 +512,13 @@ class optimus_vae(nn.Module):
         # (batch_size, nsamples, nz)
         dev = z - mu
 
-        # (batch_size, nsamples)
-        log_density = -0.5 * ((dev ** 2) / var).sum(dim=-1) - \
-            0.5 * (nz * math.log(2 * math.pi) + logvar.sum(-1))
-
-        return log_density
+        return -0.5 * ((dev**2) / var).sum(dim=-1) - 0.5 * (
+            nz * math.log(2 * math.pi) + logvar.sum(-1)
+        )
 
     def calc_mi(self, test_data_batch, args):
         # calc_mi_v3
-        import math 
+        import math
         from modules.utils import log_sum_exp
 
         mi = 0
@@ -568,7 +561,7 @@ class optimus_vae(nn.Module):
             # get z_samples
             ###############
             mu, logvar = mu_batch_list[i].cuda(), logvar_batch_list[i].cuda()
-            
+
             # [z_batch, 1, nz]
 
             z_samples = self.reparameterize(mu, logvar, 1)
@@ -595,16 +588,14 @@ class optimus_vae(nn.Module):
 
             # (z_batch, x_batch)
             log_density = -0.5 * ((dev ** 2) / var).sum(dim=-1) - \
-                0.5 * (nz * math.log(2 * math.pi) + logvar.sum(-1))
+                    0.5 * (nz * math.log(2 * math.pi) + logvar.sum(-1))
 
             # log q(z): aggregate posterior
             # [z_batch]
             log_qz += (log_sum_exp(log_density, dim=1) - math.log(x_batch)).sum(-1)
 
         log_qz /= num_examples
-        mi = neg_entropy - log_qz
-
-        return mi
+        return neg_entropy - log_qz
 
     def calc_au(self, eval_dataloader, args, delta=0.01):
         """compute the number of active units

@@ -62,20 +62,17 @@ class DDIMSampler_VD(DDIMSampler):
 
         device = self.model.device
         dtype = condition[0][0].dtype
-        
-        if isinstance(shape[0], list):
-            bs = shape[0][0]
-        else:    
-            bs = shape[0]
+
+        bs = shape[0][0] if isinstance(shape[0], list) else shape[0]
         if xt is None:
             if isinstance(shape[0], list):
                 xt = [torch.randn(shape_i, device=device, dtype=dtype) for shape_i in shape]
             else:    
                 xt = torch.randn(shape, device=device, dtype=dtype)
-                
+
         if timesteps is None:
             timesteps = self.ddpm_num_timesteps if ddim_use_original_steps else self.ddim_timesteps
-        elif timesteps is not None and not ddim_use_original_steps:
+        elif not ddim_use_original_steps:
             subset_end = int(min(timesteps / self.ddim_timesteps.shape[0], 1) * self.ddim_timesteps.shape[0]) - 1
             timesteps = self.ddim_timesteps[:subset_end]
 

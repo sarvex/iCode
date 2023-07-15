@@ -157,18 +157,19 @@ class AverageJoinSlicer(BaseSlicer):
         joined_output = torch.zeros(total_length, model_output[0].size(-1),
                                     device=device, dtype=dtype)
         overlaps = [0]
-        for i, (preceding_span, succeding_span) in enumerate(
-            zip(span_data[:-1], span_data[1:])
-        ):
-            overlap = preceding_span.end_position - succeding_span.start_position
-            overlaps.append(overlap)
+        overlaps.extend(
+            preceding_span.end_position - succeding_span.start_position
+            for preceding_span, succeding_span in zip(
+                span_data[:-1], span_data[1:]
+            )
+        )
         overlaps.append(0)
         joining_weights = self._generate_slice_joining_weights(
-            (len(model_output), max([sp.size(0) for sp in model_output])),  # type: ignore
+            (len(model_output), max(sp.size(0) for sp in model_output)),
             overlaps[:-1],
             overlaps[1:],
             device=device,
-            dtype=dtype
+            dtype=dtype,
         ).unsqueeze(2)
         for span_wght, span_emb, span in zip(joining_weights, model_output,  # type: ignore
                                              span_data):
@@ -183,11 +184,11 @@ class AverageJoinSlicer(BaseSlicer):
     def create_slices(
         self, tokens: Sequence[str], seg_data: Optional[Mapping[str, Any]] = None
     ) -> Sequence[Tuple[int, int]]:
-        non_zero_slices = []
-        for span in self._create_slices(tokens, seg_data):
-            if span[1] > span[0]:
-                non_zero_slices.append(span)
-        return non_zero_slices
+        return [
+            span
+            for span in self._create_slices(tokens, seg_data)
+            if span[1] > span[0]
+        ]
 
     def _create_slices(
         self, tokens: Sequence[str], seg_data: Optional[Mapping[str, Any]]

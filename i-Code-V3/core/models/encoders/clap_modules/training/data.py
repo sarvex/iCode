@@ -114,11 +114,12 @@ def preprocess_txt(text):
 
 def get_dataset_size(shards, sizefilepath_=None, is_local=True):
     if isinstance(shards, list):
-        size_list = []
-        for s in shards:
-            size_list.append(
-                get_dataset_size(s, sizefilepath_=sizefilepath_, is_local=is_local)[0]
-            )
+        size_list = [
+            get_dataset_size(
+                s, sizefilepath_=sizefilepath_, is_local=is_local
+            )[0]
+            for s in shards
+        ]
     else:
         if not is_local:
             for n in dataset_split.keys():
@@ -133,19 +134,15 @@ def get_dataset_size(shards, sizefilepath_=None, is_local=True):
         if sizefilepath_ is not None:
             sizes = json.load(open(sizefilepath_, "r"))
             total_size = sum(
-                [
-                    int(sizes[os.path.basename(shard.replace(".tar -", ".tar"))])
-                    for shard in shards_list
-                ]
+                int(sizes[os.path.basename(shard.replace(".tar -", ".tar"))])
+                for shard in shards_list
             )
         else:
             sizes_filename = os.path.join(dir_path, "sizes.json")
             len_filename = os.path.join(dir_path, "__len__")
             if os.path.exists(sizes_filename):
                 sizes = json.load(open(sizes_filename, "r"))
-                total_size = sum(
-                    [int(sizes[os.path.basename(shard)]) for shard in shards_list]
-                )
+                total_size = sum(int(sizes[os.path.basename(shard)]) for shard in shards_list)
             elif os.path.exists(len_filename):
                 # FIXME this used to be eval(open(...)) but that seemed rather unsafe
                 total_size = ast.literal_eval(open(len_filename, "r").read())
@@ -518,9 +515,7 @@ def collate_fn(batch):
         if isinstance(batch[0][k], dict):  # dealwith bert tokenizer output
             batch_dict[k] = {}
             for kk in batch[0][k].keys():
-                tmp = []
-                for i in range(len(batch)):
-                    tmp.append(batch[i][k][kk])
+                tmp = [batch[i][k][kk] for i in range(len(batch))]
                 batch_dict[k][kk] = torch.vstack(tmp)
         elif isinstance(batch[0][k], torch.Tensor):
             batch_dict[k] = torch.stack([sample[k] for sample in batch])
@@ -545,13 +540,13 @@ def get_wds_dataset(
     """
     Get a dataset for wdsdataloader.
     """
-    if is_local is None and (not args.remotedata is None):
+    if is_local is None and args.remotedata is not None:
         is_local = not args.remotedata
 
     input_shards = args.train_data if is_train else args.val_data
     assert input_shards is not None
 
-    if not sizefilepath_ is None:
+    if sizefilepath_ is not None:
         sizefilepath = sizefilepath_
     else:
         sizefilepath = os.path.join(os.path.dirname(input_shards[0]), "sizes.json")

@@ -60,7 +60,7 @@ class DataConverter(metaclass=ABCMeta):
         self._max_seq_length = max_seq_length
         self._max_bpe = max_seq_length - additional_bpe_tokens_count
         self._long_page_strategy = long_page_strategy
-        self._segment_levels_cleaned = set([s for s in segment_levels if s != 'tokens'])
+        self._segment_levels_cleaned = {s for s in segment_levels if s != 'tokens'}
         self._overlap = overlap
         self._salient_spans = salient_spans
         if self._salient_spans:
@@ -139,7 +139,7 @@ class DataConverter(metaclass=ABCMeta):
         starts = np.cumsum([0] + [len(tok) for tok in bpe_tokens])
         # check if last token ranges are correct
         assert text[starts[-2]:starts[-1]].strip() == bpe_tokens[-1].replace('▁', ' ').replace('Ġ', ' ').strip(), \
-            "Text for salient span processing was built incorrectly"
+                "Text for salient span processing was built incorrectly"
         doc = self.nlp(text)
 
         doc_entities = collections.defaultdict(list)
@@ -169,7 +169,7 @@ class DataConverter(metaclass=ABCMeta):
         # first token should not be masked + should not be two consecutive spans being masked
         idx_clean = []
         last_end = -1
-        for rng_idx, rng in enumerate(span_ranges):
+        for rng in span_ranges:
             if rng[0] == 0 or rng[0] <= last_end:
                 idx_clean.append(False)
             else:
@@ -362,9 +362,7 @@ class DataConverter(metaclass=ABCMeta):
             return len(bpe_token) - 2
         if bpe_token.startswith('Ġ'):  # roberta
             return len(bpe_token) - 1
-        if bpe_token.startswith('▁'):  # xlm
-            return len(bpe_token) - 1
-        return len(bpe_token)
+        return len(bpe_token) - 1 if bpe_token.startswith('▁') else len(bpe_token)
 
     def _transform_to_bpe(self, tokens: Sequence[str],
                           token_ocr_ranges: Optional[Sequence[Tuple[int, int]]],
@@ -388,11 +386,7 @@ class DataConverter(metaclass=ABCMeta):
         bpe_bboxes: List[Sequence[float]] = []
         org_tokens_idx = []
         tok_bpe_map = []
-        if use_ocr_ranges:
-            bpe_token_ocr_ranges = []  # type: ignore
-        else:
-            bpe_token_ocr_ranges = None  # type: ignore
-
+        bpe_token_ocr_ranges = [] if use_ocr_ranges else None
         for tok_idx, (t, blst) in enumerate(zip(tokens, bpe)):
             curr_len = len(bpe_tokens)
             tok_bpe_map.append((curr_len, curr_len + len(blst)))
@@ -463,11 +457,16 @@ class DataConverter(metaclass=ABCMeta):
 
     def _is_span_valid(self, span: Span) -> bool:
         tokens_len = len(span.tokens)
-        valid = tokens_len <= self._max_seq_length and \
-            len(span.token_label_indices) <= self._max_seq_length and \
-            len(span.masked_positions) == len(span.masked_labels) and \
-            len(span.masked_labels) <= self._max_seq_length and \
-            all([self.__is_seg_valid(k, v, tokens_len) for k, v in span.seg_data.items()])
+        valid = (
+            tokens_len <= self._max_seq_length
+            and len(span.token_label_indices) <= self._max_seq_length
+            and len(span.masked_positions) == len(span.masked_labels)
+            and len(span.masked_labels) <= self._max_seq_length
+            and all(
+                self.__is_seg_valid(k, v, tokens_len)
+                for k, v in span.seg_data.items()
+            )
+        )
         if not valid:
             logging.warning(f"Span in document {span.example_id} seems to be corrupted")
 
@@ -476,10 +475,10 @@ class DataConverter(metaclass=ABCMeta):
     def __is_seg_valid(self, key: str, seg: Dict[str, Any], token_count: int):
         if key == 'tokens':
             return token_count == len(seg['bboxes']) == len(seg['org_bboxes'])
-        elif key in ("lines", "pages"):
+        elif key in {"lines", "pages"}:
             return len(seg['ranges']) == len(seg['bboxes']) == len(seg['org_bboxes']) and \
-                   len(seg['ranges']) <= self._max_seq_length
-        elif key in ("images", "lazyimages"):
+                       len(seg['ranges']) <= self._max_seq_length
+        elif key in {"images", "lazyimages"}:
             return True
 
     def _get_exid(self) -> int:
@@ -507,11 +506,11 @@ class DataConverter(metaclass=ABCMeta):
                 if seg_key == 'tokens':
                     idx = list(range(prange[0], prange[1]))
                 else:
-                    idx = []
-                    for seg_idx, seg_rng in enumerate(seg['ranges']):
-                        if prange[0] <= seg_rng[0] < prange[1]:
-                            idx.append(seg_idx)
-
+                    idx = [
+                        seg_idx
+                        for seg_idx, seg_rng in enumerate(seg['ranges'])
+                        if prange[0] <= seg_rng[0] < prange[1]
+                    ]
                 rel_pos[idx, 0] = seg['org_bboxes'][idx, 0].clip(min=0, max=psize[2]) / (psize[2] * np.sqrt(2))
                 rel_pos[idx, 2] = seg['org_bboxes'][idx, 2].clip(min=0, max=psize[2]) / (psize[2] * np.sqrt(2))
                 rel_pos[idx, 1] = seg['org_bboxes'][idx, 1].clip(min=0, max=psize[3]) / (psize[2] * np.sqrt(2))
@@ -537,13 +536,12 @@ class DataConverter(metaclass=ABCMeta):
         :param seg_data: dictionary of segments elements
         :return: dictionary of seg_data with added page elements
         """
-        if "pages" in seg_data:
-            seg_data_ = deepcopy(seg_data)
-            seg_data_["pages"]["ordinals"] = np.arange(seg_data["pages"]["ranges"].shape[0])
-            seg_data_["pages"]["cardinality"] = seg_data["pages"]["ranges"].shape[0]
-            return seg_data_
-        else:
+        if "pages" not in seg_data:
             raise ValueError("pages is mandatory element of seg_data")
+        seg_data_ = deepcopy(seg_data)
+        seg_data_["pages"]["ordinals"] = np.arange(seg_data["pages"]["ranges"].shape[0])
+        seg_data_["pages"]["cardinality"] = seg_data["pages"]["ranges"].shape[0]
+        return seg_data_
 
     @staticmethod
     def _feature_empty_array(feature: str, seq_length: int, default=None) -> np.ndarray:

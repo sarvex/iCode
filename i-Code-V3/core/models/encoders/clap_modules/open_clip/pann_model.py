@@ -418,12 +418,11 @@ class Cnn14(nn.Module):
         embedding = F.dropout(x, p=0.5, training=self.training)
         clipwise_output = torch.sigmoid(self.fc_audioset(x))
 
-        output_dict = {
+        return {
             "clipwise_output": clipwise_output,
             "embedding": embedding,
             "fine_grained_embedding": latent_output,
         }
-        return output_dict
 
 
 class Cnn6(nn.Module):
@@ -544,13 +543,11 @@ class Cnn6(nn.Module):
         embedding = F.dropout(x, p=0.5, training=self.training)
         clipwise_output = torch.sigmoid(self.fc_audioset(x))
 
-        output_dict = {
+        return {
             "clipwise_output": clipwise_output,
             "embedding": embedding,
             "fine_grained_embedding": latent_output,
         }
-
-        return output_dict
 
 
 class Cnn10(nn.Module):
@@ -674,19 +671,17 @@ class Cnn10(nn.Module):
         embedding = F.dropout(x, p=0.5, training=self.training)
         clipwise_output = torch.sigmoid(self.fc_audioset(x))
 
-        output_dict = {
+        return {
             "clipwise_output": clipwise_output,
             "embedding": embedding,
             "fine_grained_embedding": latent_output,
         }
 
-        return output_dict
-
 
 def create_pann_model(audio_cfg, enable_fusion=False, fusion_type="None"):
     try:
         ModelProto = eval(audio_cfg.model_name)
-        model = ModelProto(
+        return ModelProto(
             sample_rate=audio_cfg.sample_rate,
             window_size=audio_cfg.window_size,
             hop_size=audio_cfg.hop_size,
@@ -697,7 +692,6 @@ def create_pann_model(audio_cfg, enable_fusion=False, fusion_type="None"):
             enable_fusion=enable_fusion,
             fusion_type=fusion_type,
         )
-        return model
     except:
         raise RuntimeError(
             f"Import Model for {audio_cfg.model_name} not found, or the audio cfg parameters are not enough."

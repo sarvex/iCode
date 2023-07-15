@@ -100,13 +100,16 @@ class T52dStack(T5PreTrainedModel):
             )
 
         self.block = nn.ModuleList(
-            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
+            [
+                T5Block(config, has_relative_attention_bias=i == 0)
+                for i in range(self.num_layers)
+            ]
         )
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        
-        
+
+
         self.dropout = nn.Dropout(config.dropout_rate)
-        
+
         if not self.is_decoder:
             self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
 
@@ -195,7 +198,9 @@ class T52dStack(T5PreTrainedModel):
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
         if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(self)         
+            assert (
+                self.is_decoder
+            ), f":obj:`use_cache` can only be set to `True` if {self} is used as a decoder"
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -228,8 +233,8 @@ class T52dStack(T5PreTrainedModel):
         else:
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
-        
-        
+
+
         hidden_states = inputs_embeds
         hidden_states = self.dropout(hidden_states)
 
@@ -292,7 +297,7 @@ class T52dStack(T5PreTrainedModel):
                 ]
                 if v is not None
             )
-        
+
         return BaseModelOutputWithVisionEmbeds(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -382,10 +387,7 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
         if seg_data is not None:
             seg_data = torch.clip(seg_data, 0.0, 1.0)
         if input_dict is not None:
-            return_task_outputs = []
-            for task in input_dict:
-                return_task_outputs.append(self.forward(**input_dict[task]))
-            return return_task_outputs
+            return [self.forward(**value) for value in input_dict.values()]
         if encoder_outputs is None:
             # compute positional bias (can be aggregation of 1D and 2D biases)
             encoder_position_bias = self.relative_bias(
@@ -427,7 +429,7 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
 
         attention_mask = torch.cat([attention_mask, torch.ones_like(encoder_outputs.last_hidden_state[:, :encoder_outputs.last_hidden_state.size(1)-attention_mask.size(1), 0])], 1)
 
-        outputs = super().forward(
+        return super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -443,8 +445,6 @@ class UdopDualForConditionalGeneration(T5ForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return outputs  # type: ignore
     
     def get_encoder(self):
         return self

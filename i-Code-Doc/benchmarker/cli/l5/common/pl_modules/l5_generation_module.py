@@ -126,7 +126,7 @@ class L5GenerationModule(BaseLightningModule):
         loss_tensors = self._step(batch)
         logs = {'loss': loss_tensors.mean()}
         lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(self.trainer.optimizers[0].param_groups)}
-        logs.update(lrs)
+        logs |= lrs
         self.log_dict(logs)
         return loss_tensors.mean()
 
@@ -134,10 +134,10 @@ class L5GenerationModule(BaseLightningModule):
         return self._generative_step(batch)
 
     def collate_metrics(self, outputs):
-        generative_metrics = {
-            metric_name: np.array([x[metric_name] for x in outputs]).mean() for metric_name in ["gen_time", "gen_len"]
+        return {
+            metric_name: np.array([x[metric_name] for x in outputs]).mean()
+            for metric_name in ["gen_time", "gen_len"]
         }
-        return generative_metrics
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
         if outputs:
@@ -174,25 +174,25 @@ class L5GenerationModule(BaseLightningModule):
                 ref_items = [i.strip() for i in ref.split('|')]
                 predictions.append(ans_items)
                 references.append(ref_items)
+        elif 'label_name' in data:
+            for (label, pred, ref) in zip(data['label_name'], data['preds'], data['target']):
+                ans_items = (
+                    [f'{label}{i.strip()}' for i in pred.split('|')]
+                    if pred != 'None'
+                    else []
+                )
+                if ref != 'None':
+                    ref_items = [f'{label}{i.strip()}' for i in ref.split('|')]
+                else:
+                    ref_items = []
+                predictions.append(ans_items)
+                references.append(ref_items)
         else:
-            if 'label_name' in data:
-                for (label, pred, ref) in zip(data['label_name'], data['preds'], data['target']):
-                    if pred != 'None':
-                        ans_items = [f'{label}{i.strip()}' for i in pred.split('|')]
-                    else:
-                        ans_items = []
-                    if ref != 'None':
-                        ref_items = [f'{label}{i.strip()}' for i in ref.split('|')]
-                    else:
-                        ref_items = []
-                    predictions.append(ans_items)
-                    references.append(ref_items)
-            else:
-                for (pred, ref) in zip(data['preds'], data['target']):
-                    ans_items = [i.strip() for i in pred.split('|')]
-                    ref_items = [i.strip() for i in ref.split('|')]
-                    predictions.append(ans_items)
-                    references.append(ref_items)
+            for (pred, ref) in zip(data['preds'], data['target']):
+                ans_items = [i.strip() for i in pred.split('|')]
+                ref_items = [i.strip() for i in ref.split('|')]
+                predictions.append(ans_items)
+                references.append(ref_items)
         return (predictions, references)
 
     def ids_to_clean_text(self, generated_ids: List[List[int]]) -> List[str]:

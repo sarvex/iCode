@@ -31,10 +31,9 @@ def save_t5_kleister_cache(path, tokenizer, features, max_seq_length, segment_le
 
 def add_tag_to_path(path, tag):
     path = str(path)
-    assert path[-4:] == ".tsv"
+    assert path.endswith(".tsv")
     tag = tag.replace(".", "_")
-    path_out = path[:-4] + f",{tag}.tsv"
-    return path_out
+    return path[:-4] + f",{tag}.tsv"
 
 
 def get_in_file(path: Path) -> List[Tuple[str, str]]:
@@ -110,7 +109,7 @@ def pickle_save(obj, path):
 
 
 def flatten_list(summary_ids: List[List]):
-    return [x for x in itertools.chain.from_iterable(summary_ids)]
+    return list(itertools.chain.from_iterable(summary_ids))
 
 
 def save_json(content, path, indent=4, **json_dump_kwargs):

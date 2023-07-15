@@ -13,7 +13,7 @@ from .openai import load_openai_model
 from .pretrained import get_pretrained_url, download_pretrained
 from .transform import image_transform
 
-_MODEL_CONFIG_PATHS = [Path(__file__).parent / f"model_configs/"]
+_MODEL_CONFIG_PATHS = [Path(__file__).parent / "model_configs/"]
 _MODEL_CONFIGS = {}  # directory (model_name: config) of model architecture configs
 
 
@@ -42,10 +42,9 @@ def _rescan_model_configs():
             if all(a in model_cfg for a in ("embed_dim", "audio_cfg", "text_cfg")):
                 _MODEL_CONFIGS[cf.stem] = model_cfg
 
-    _MODEL_CONFIGS = {
-        k: v
-        for k, v in sorted(_MODEL_CONFIGS.items(), key=lambda x: _natural_key(x[0]))
-    }
+    _MODEL_CONFIGS = dict(
+        sorted(_MODEL_CONFIGS.items(), key=lambda x: _natural_key(x[0]))
+    )
 
 
 _rescan_model_configs()  # initial populate of model config registry
@@ -88,17 +87,17 @@ def create_model(
     )  # for callers using old naming with / in ViT names
     pretrained_orig = pretrained
     pretrained = pretrained.lower()
-    if pretrained == "openai":
-        if amodel_name in _MODEL_CONFIGS:
-            logging.info(f"Loading {amodel_name} model config.")
-            model_cfg = deepcopy(_MODEL_CONFIGS[amodel_name])
-        else:
-            logging.error(
-                f"Model config for {amodel_name} not found; available models {list_models()}."
-            )
-            raise RuntimeError(f"Model config for {amodel_name} not found.")
+    if amodel_name in _MODEL_CONFIGS:
+        logging.info(f"Loading {amodel_name} model config.")
+        model_cfg = deepcopy(_MODEL_CONFIGS[amodel_name])
+    else:
+        logging.error(
+            f"Model config for {amodel_name} not found; available models {list_models()}."
+        )
+        raise RuntimeError(f"Model config for {amodel_name} not found.")
 
-        logging.info(f"Loading pretrained ViT-B-16 text encoder from OpenAI.")
+    if pretrained == "openai":
+        logging.info("Loading pretrained ViT-B-16 text encoder from OpenAI.")
         # Hard Code in model name
         model_cfg["text_cfg"]["model_type"] = tmodel_name
         model = load_openai_model(
@@ -111,18 +110,9 @@ def create_model(
             fusion_type=fusion_type,
         )
         # See https://discuss.pytorch.org/t/valueerror-attemting-to-unscale-fp16-gradients/81372
-        if precision == "amp" or precision == "fp32":
+        if precision in {"amp", "fp32"}:
             model = model.float()
     else:
-        if amodel_name in _MODEL_CONFIGS:
-            logging.info(f"Loading {amodel_name} model config.")
-            model_cfg = deepcopy(_MODEL_CONFIGS[amodel_name])
-        else:
-            logging.error(
-                f"Model config for {amodel_name} not found; available models {list_models()}."
-            )
-            raise RuntimeError(f"Model config for {amodel_name} not found.")
-
         if force_quick_gelu:
             # override for use of QuickGELU on non-OpenAI transformer models
             model_cfg["quick_gelu"] = True
@@ -131,13 +121,12 @@ def create_model(
         model_cfg["enable_fusion"] = enable_fusion
         model_cfg["fusion_type"] = fusion_type
         model_cfg["joint_embed_shape"] = joint_embed_shape
-        
+
         model = CLAP(**model_cfg)
 
         if pretrained:
             checkpoint_path = ""
-            url = get_pretrained_url(amodel_name, pretrained)
-            if url:
+            if url := get_pretrained_url(amodel_name, pretrained):
                 checkpoint_path = download_pretrained(url, root=openai_model_cache_dir)
             elif os.path.exists(pretrained_orig):
                 checkpoint_path = pretrained_orig
@@ -170,7 +159,7 @@ def create_model(
                             and "logmel_extractor" not in key
                         ):
                             v = audio_ckpt.pop(key)
-                            audio_ckpt["audio_branch." + key] = v
+                            audio_ckpt[f"audio_branch.{key}"] = v
                 elif os.path.basename(pretrained_audio).startswith(
                     "PANN"
                 ):  # checkpoint trained via HTSAT codebase
@@ -180,7 +169,7 @@ def create_model(
                     for key in keys:
                         if key.startswith("sed_model"):
                             v = audio_ckpt.pop(key)
-                            audio_ckpt["audio_branch." + key[10:]] = v
+                            audio_ckpt[f"audio_branch.{key[10:]}"] = v
                 elif os.path.basename(pretrained_audio).startswith(
                     "finetuned"
                 ):  # checkpoint trained via linear probe codebase
@@ -198,7 +187,7 @@ def create_model(
                             and "logmel_extractor" not in key
                         ):
                             v = audio_ckpt.pop(key)
-                            audio_ckpt["audio_branch." + key[10:]] = v
+                            audio_ckpt[f"audio_branch.{key[10:]}"] = v
                 elif os.path.basename(pretrained_audio).startswith(
                     "HTSAT"
                 ):  # checkpoint trained via HTSAT codebase
@@ -208,7 +197,7 @@ def create_model(
                     for key in keys:
                         if key.startswith("sed_model"):
                             v = audio_ckpt.pop(key)
-                            audio_ckpt["audio_branch." + key[10:]] = v
+                            audio_ckpt[f"audio_branch.{key[10:]}"] = v
                 elif os.path.basename(pretrained_audio).startswith(
                     "finetuned"
                 ):  # checkpoint trained via linear probe codebase
@@ -216,7 +205,7 @@ def create_model(
                 else:
                     raise ValueError("Unknown audio checkpoint")
             else:
-                raise f"this audio encoder pretrained checkpoint is not support"
+                raise "this audio encoder pretrained checkpoint is not support"
 
             model.load_state_dict(audio_ckpt, strict=False)
             logging.info(

@@ -60,20 +60,14 @@ class CLAPAudioEmbeddingClassifierFreev2(nn.Module):
     def get_unconditional_condition(self, batchsize):
         self.unconditional_token = self.model.get_text_embedding(
             self.tokenizer(["", ""])
-        )[0:1]
+        )[:1]
         return torch.cat([self.unconditional_token.unsqueeze(0)] * batchsize, dim=0)
 
     def batch_to_list(self, batch):
-        ret = []
-        for i in range(batch.size(0)):
-            ret.append(batch[i])
-        return ret
+        return [batch[i] for i in range(batch.size(0))]
 
     def make_decision(self, probability):
-        if float(torch.rand(1)) < probability:
-            return True
-        else:
-            return False
+        return float(torch.rand(1)) < probability
 
     def random_uniform(self, start, end):
         val = torch.rand(1).item()

@@ -136,13 +136,10 @@ def _recompute_seg_data_for_sentinels(seg_data, noise_mask, noise_spans_ranges):
     tok_range_list = []
     prev_x1 = 0
     for x0, x1 in noise_spans_ranges:
-        for i in range(prev_x1, x0):
-            tok_range_list.append([i, i + 1])
+        tok_range_list.extend([i, i + 1] for i in range(prev_x1, x0))
         tok_range_list.append([x0, x1])
         prev_x1 = x1
-    for i in range(prev_x1, len(noise_mask)):
-        tok_range_list.append([i, i + 1])
-
+    tok_range_list.extend([i, i + 1] for i in range(prev_x1, len(noise_mask)))
     tok_range = np.array(tok_range_list)
 
     for skey, seg in seg_data.items():

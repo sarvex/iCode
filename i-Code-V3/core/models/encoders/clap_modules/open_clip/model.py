@@ -32,9 +32,7 @@ class MLPLayers(nn.Module):
 
         sequence = []
         for u0, u1 in zip(units[:-1], units[1:]):
-            sequence.append(nn.Linear(u0, u1))
-            sequence.append(self.nonlin)
-            sequence.append(nn.Dropout(self.dropout))
+            sequence.extend((nn.Linear(u0, u1), self.nonlin, nn.Dropout(self.dropout)))
         sequence = sequence[:-2]
 
         self.sequential = nn.Sequential(*sequence)
@@ -193,9 +191,7 @@ class ModifiedResNet(nn.Module):
         layers = [Bottleneck(self._inplanes, planes, stride)]
 
         self._inplanes = planes * Bottleneck.expansion
-        for _ in range(1, blocks):
-            layers.append(Bottleneck(self._inplanes, planes))
-
+        layers.extend(Bottleneck(self._inplanes, planes) for _ in range(1, blocks))
         return nn.Sequential(*layers)
 
     def init_parameters(self):
@@ -630,13 +626,11 @@ class CLAP(nn.Module):
 
         """
         device = next(self.parameters()).device
-        input_dict = {}
         keys = data[0].keys()
-        for k in keys:
-            input_dict[k] = torch.cat([d[k].unsqueeze(0) for d in data], dim=0).to(
-                device
-            )
-
+        input_dict = {
+            k: torch.cat([d[k].unsqueeze(0) for d in data], dim=0).to(device)
+            for k in keys
+        }
         audio_embeds = self.audio_projection(
             self.encode_audio(input_dict, device=device)["embedding"]
         )
@@ -745,11 +739,11 @@ def build_model_from_openai_state_dict(
     transformer_width = state_dict["ln_final.weight"].shape[0]
     transformer_heads = transformer_width // 64
     transformer_layers = len(
-        set(
+        {
             k.split(".")[2]
             for k in state_dict
-            if k.startswith(f"transformer.resblocks")
-        )
+            if k.startswith("transformer.resblocks")
+        }
     )
 
     audio_cfg = CLAPAudioCfp(**audio_cfg)

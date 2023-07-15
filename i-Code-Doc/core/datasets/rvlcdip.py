@@ -143,10 +143,10 @@ class RvlCdipDataset(Dataset):
     def load_file(self, file_path, ocr_dir, image_dir): 
         labels, examples, images = [], [], []
         img_path, label = file_path.split()
-        
+
         # label = int(label)
         if img_path.endswith('.tif'):
-            file_path = img_path + '.ocr.json'
+            file_path = f'{img_path}.ocr.json'
             file_path = os.path.join(ocr_dir, file_path)
             image = os.path.join(image_dir, img_path)
 #             if os.path.exists(file_path):
@@ -253,25 +253,23 @@ def read_ocr_core_engine(file, image_dir, tokenizer, max_seq_length, num_img_emb
         except:
             data = {}
     rets = []
-    n_split = 0
-
     if 'analyzeResult' not in data or 'readResults' not in data['analyzeResult']:
+        n_split = 0
+
         return rets, n_split
 
     tiff_images = Image.open(image_dir)
 
     doc = data['analyzeResult']['readResults']
-    
+
     pid = random.choice(list(range(len(doc))))
     page = doc[pid]
     text_list, bbox_list = [], []
     lines = page['lines']
     height, width = float(page['height']), float(page['width'])
-    page_size = (width, height)
-
     tiff_images.seek(pid)
     image = img_trans_torchvision(tiff_images, image_size)
-    for cnt, line in enumerate(lines):
+    for line in lines:
         for j, word in enumerate(line["words"]):
             text = normalText(word['text'])
             if text == '':
@@ -281,10 +279,10 @@ def read_ocr_core_engine(file, image_dir, tokenizer, max_seq_length, num_img_emb
             for sub_token in sub_tokens:
                 text_list.append(sub_token)
                 bbox_list.append(bb)
-    if len(text_list) > 0:
+    if text_list:
+        page_size = (width, height)
+
         rets.append([text_list, bbox_list, image, page_size])
 
     assert len(text_list) == len(bbox_list)
-    n_split = len(rets)
-    
-    return rets, n_split
+    return rets, len(rets)

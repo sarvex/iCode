@@ -93,11 +93,10 @@ def get_data_part(
 def convert_to_np(data: Sequence[Any], el_name: str) -> np.ndarray:
     ft = FEAT_META[el_name]
     dtype = ft["dtype"]
-    dim = ft["dim"]
     if len(data):
         return np.array(data, dtype=dtype)
-    else:
-        return np.empty((0,) + tuple(dim), dtype=dtype)
+    dim = ft["dim"]
+    return np.empty((0,) + tuple(dim), dtype=dtype)
 
 
 def apply_on_nested_dict(fn: Callable, ndict: Dict[str, Any]) -> Dict[str, Any]:
